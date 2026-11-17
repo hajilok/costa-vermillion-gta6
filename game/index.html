@@ -3,17 +3,123 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-</style>
+<title>Costa Vermillion: Sunset Syndicate</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./styles/hud.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="game-canvas" aria-label="Costa Vermillion Sunset Syndicate 3D open world"></canvas>
+
+<div id="hud-root" aria-hidden="false">
+  <div id="mission-banner" role="status" aria-live="polite">
+    <div id="mission-chapter">Chapter 1 &mdash; Salt &amp; Neon</div>
+    <div id="mission-title">Welcome to Puerto Vermillion</div>
+    <div id="mission-objective">Meet Mateo Cruz at Hotel Mariposa</div>
+    <div id="mission-dist">142 m</div>
+  </div>
+
+  <div id="status-cluster" aria-label="Player status">
+    <div id="wanted-block">
+      <div id="wanted-stars" aria-label="Wanted level">
+        <span>&#9733;</span><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span>
+      </div>
+      <div id="wanted-label">PVPD: CLEAR</div>
+    </div>
+    <div id="cash-value">$1,250</div>
+    <div id="respect-value">RESPECT 10</div>
+    <div id="weapon-block">
+      <span id="weapon-name">viper_pistol</span>
+      <span id="weapon-ammo">12 / 48</span>
+    </div>
+    <div id="radio-station">RADIO SOL 88.4</div>
+  </div>
+
+  <div id="radar-cluster" aria-label="Radar">
+    <canvas id="minimap-canvas" width="210" height="210"></canvas>
+    <div id="district-name">Coral Promenade</div>
+    <div class="bar-shell" aria-label="Health"><div id="health-bar-fill"></div></div>
+    <div class="bar-shell" aria-label="Armor"><div id="armor-bar-fill"></div></div>
+  </div>
+
+  <div id="speedo-cluster" aria-label="Vehicle speed">
+    <div id="speed-num">0</div>
+    <div id="speed-gear">P</div>
+    <div id="vehicle-label">ON FOOT</div>
+    <div class="bar-shell nitro-shell" aria-label="Nitro"><div id="nitro-bar-fill"></div></div>
+  </div>
+
+  <div id="aim-reticle" aria-hidden="true"><span></span></div>
+
+  <div id="dialogue-box" aria-live="polite">
+    <div id="dialogue-speaker">ELENA VEGA</div>
+    <div id="dialogue-line">The whole coast is ours if we take it block by block.</div>
+  </div>
+  <div id="context-hint">Press E to talk &middot; F to enter vehicle</div>
+</div>
+
+<div id="menu-overlay" class="visible" role="dialog" aria-modal="true" aria-label="Game menu">
+  <div class="menu-card">
+    <h1>COSTA VERMILLION</h1>
+    <p class="subtitle">SUNSET SYNDICATE &mdash; Puerto Vermillion</p>
+    <div class="menu-buttons">
+      <button id="btn-resume" type="button">Resume</button>
+      <button id="btn-newgame" type="button">New Game</button>
+    </div>
+    <section class="menu-main">
+      <div class="menu-mapcol" aria-label="City map">
+        <h2>City Map &mdash; Puerto Vermillion</h2>
+        <canvas id="worldmap-canvas" width="420" height="300"></canvas>
+        <section aria-label="Save slots">
+          <h2>Save Slots (localStorage)</h2>
+          <div class="save-row">
+            <button type="button" data-save="1">Save 1</button>
+            <button type="button" data-load="1">Load 1</button>
+            <button type="button" data-save="2">Save 2</button>
+            <button type="button" data-load="2">Load 2</button>
+            <button type="button" data-save="3">Save 3</button>
+            <button type="button" data-load="3">Load 3</button>
+          </div>
+          <div id="save-badge">Slot 1: Ch.4 &middot; $18,450 &middot; Saved</div>
+        </section>
+      </div>
+      <div class="menu-sidecol">
+        <section aria-label="Story chapters">
+          <h2>Story Chapters &mdash; The Sunset Ledger</h2>
+          <ol id="chapter-list">
+            <li>Salt &amp; Neon</li>
+            <li>The Mariposa Deal</li>
+            <li>Engines of Bahia</li>
+            <li>Starlight Debts</li>
+            <li>Vermillion Tower Run</li>
+            <li>The Sunset Ledger</li>
+          </ol>
+        </section>
+        <section aria-label="Controls">
+          <h2>Controls &mdash; Keyboard + Mouse</h2>
+          <ul id="controls-card">
+            <li>WASD / Arrows &mdash; move / drive</li>
+            <li>Mouse &mdash; look / aim</li>
+            <li>E &mdash; talk / interact</li>
+            <li>F &mdash; enter / exit vehicle</li>
+            <li>R &mdash; reload &middot; T &mdash; radio</li>
+            <li>1&ndash;4 &mdash; weapons, G &mdash; grenade</li>
+            <li>Shift &mdash; sprint / nitro</li>
+            <li>Space &mdash; handbrake / drift</li>
+            <li>M &mdash; city map, Esc &mdash; pause</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+  </div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

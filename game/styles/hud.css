@@ -1,0 +1,497 @@
+/* Costa Vermillion: Sunset Syndicate — tropical sunset-neon HUD. Offline, system fonts only. */
+:root {
+  --coral: #ff5a4e;
+  --gold: #ffc44d;
+  --cyan: #38e8ff;
+  --pink: #ff3fa4;
+  --ink: #0c0a18;
+  --panel: rgba(10, 8, 26, 0.72);
+  --panel-edge: rgba(255, 196, 77, 0.45);
+  --text: #fff8ee;
+  --muted: #ffd9a8;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #160a24;
+  color: var(--text);
+  font-family: "Segoe UI", Verdana, Arial, sans-serif;
+}
+
+#game-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  background: radial-gradient(circle at 50% 68%, #ff7a3c 0%, #d63d7a 34%, #3b1a63 62%, #0c0a24 100%);
+}
+
+#hud-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-size: 16px;
+}
+
+#mission-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 430px;
+  max-width: 46vw;
+  padding: 10px 22px 11px;
+  text-align: center;
+  background: var(--panel);
+  border: 2px solid var(--panel-edge);
+  border-top: 5px solid var(--coral);
+  border-radius: 12px;
+  box-shadow: 0 0 22px rgba(255, 90, 78, 0.5), 0 6px 22px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(5px);
+}
+
+#mission-chapter {
+  color: var(--cyan);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 13px;
+  text-shadow: 0 0 10px rgba(56, 232, 255, 0.8);
+}
+
+#mission-title {
+  color: var(--gold);
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1.1;
+  text-shadow: 0 2px 0 #6b2100, 0 0 14px rgba(255, 196, 77, 0.75);
+}
+
+#mission-objective {
+  margin-top: 3px;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 16px;
+  text-shadow: 0 2px 3px #000;
+}
+
+#mission-dist {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: #06131c;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-weight: 800;
+}
+
+#status-cluster {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 250px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 2px solid rgba(56, 232, 255, 0.55);
+  border-right: 6px solid var(--cyan);
+  border-radius: 12px;
+  box-shadow: 0 0 18px rgba(56, 232, 255, 0.35), 0 6px 18px rgba(0, 0, 0, 0.55);
+  text-align: right;
+}
+
+#wanted-stars {
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: 2px;
+  color: #4a4460;
+  text-shadow: 0 2px 2px #000;
+}
+
+#wanted-stars span.lit {
+  color: var(--gold);
+  text-shadow: 0 0 12px rgba(255, 196, 77, 0.95), 0 2px 0 #552d00;
+}
+
+#wanted-stars span.hot { color: var(--coral); text-shadow: 0 0 12px rgba(255, 90, 78, 0.95); }
+
+#wanted-label {
+  color: var(--cyan);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-size: 13px;
+}
+
+#cash-value {
+  margin-top: 4px;
+  color: #82ff9e;
+  font-size: 30px;
+  font-weight: 900;
+  text-shadow: 0 2px 0 #04350f, 0 0 14px rgba(80, 255, 140, 0.6);
+}
+
+#respect-value {
+  color: var(--pink);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+#weapon-block {
+  margin-top: 6px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+#weapon-ammo { color: var(--gold); margin-left: 8px; }
+
+#radio-station {
+  margin-top: 6px;
+  display: inline-block;
+  padding: 2px 10px;
+  background: linear-gradient(90deg, var(--coral), var(--pink));
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  font-size: 13px;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+
+#radar-cluster {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  width: 226px;
+  padding: 8px;
+  background: var(--panel);
+  border: 2px solid rgba(255, 90, 78, 0.65);
+  border-left: 6px solid var(--coral);
+  border-radius: 14px;
+}
+
+#minimap-canvas {
+  display: block;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+  background: #06121f;
+  box-shadow: 0 0 18px rgba(255, 196, 77, 0.45);
+}
+
+#district-name {
+  margin: 7px 2px 6px;
+  color: var(--gold);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 3px #000;
+}
+
+.bar-shell {
+  height: 14px;
+  margin: 5px 2px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#health-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff3b30, #ffc44d);
+}
+
+#armor-bar-fill {
+  height: 100%;
+  width: 45%;
+  background: linear-gradient(90deg, #1899d6, #38e8ff);
+}
+
+#speedo-cluster {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 210px;
+  padding: 10px 16px 12px;
+  text-align: right;
+  background: var(--panel);
+  border: 2px solid rgba(255, 63, 164, 0.6);
+  border-right: 6px solid var(--pink);
+  border-radius: 14px;
+}
+
+#speed-num {
+  font-size: 56px;
+  line-height: 0.95;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(255, 63, 164, 0.9), 0 3px 0 #000;
+}
+
+#speed-num::after {
+  content: " MPH";
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0.14em;
+}
+
+#speed-gear {
+  display: inline-block;
+  min-width: 34px;
+  margin-top: 2px;
+  padding: 1px 8px;
+  text-align: center;
+  background: #031b26;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+#vehicle-label {
+  margin-top: 4px;
+  color: var(--gold);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.nitro-shell { border-color: var(--cyan); }
+
+#nitro-bar-fill {
+  height: 100%;
+  width: 70%;
+  background: linear-gradient(90deg, #0aa7c2, #38e8ff, #fff);
+}
+
+#aim-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+}
+
+body.driving #aim-reticle { display: none; }
+
+#aim-reticle span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--cyan), inset 0 0 8px rgba(56, 232, 255, 0.8);
+  position: relative;
+}
+
+#aim-reticle span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  background: var(--coral);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#dialogue-box {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  width: min(680px, 72vw);
+  padding: 10px 18px 12px;
+  background: rgba(5, 3, 16, 0.85);
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+#dialogue-speaker {
+  color: var(--coral);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  font-size: 13px;
+}
+
+#dialogue-line {
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  text-shadow: 0 2px 3px #000;
+}
+
+#context-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 66px;
+  transform: translateX(-50%);
+  padding: 4px 16px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  color: var(--cyan);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#menu-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(14, 10, 28, 0.72);
+  backdrop-filter: blur(3px);
+  pointer-events: auto;
+  z-index: 20;
+}
+
+#menu-overlay.visible { display: flex; }
+
+.menu-card {
+  width: min(1100px, 96vw);
+  max-height: 650px;
+  overflow: hidden;
+  padding: 12px 20px 14px;
+  text-align: center;
+  background: rgba(14, 10, 28, 0.72);
+  backdrop-filter: blur(3px);
+  border: 3px solid transparent;
+  border-image: linear-gradient(90deg, var(--coral), var(--gold), var(--cyan)) 1;
+  border-radius: 18px;
+  box-shadow: 0 0 34px rgba(255, 90, 78, 0.35);
+}
+
+.menu-card h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 30px;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 18px var(--pink), 0 4px 0 #3c0717;
+}
+
+.menu-card .subtitle {
+  margin: 2px 0 8px;
+  color: var(--gold);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  font-size: 13px;
+}
+
+.menu-card h2 {
+  color: var(--cyan);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 6px 0 4px;
+}
+
+.menu-buttons { display: flex; gap: 12px; justify-content: center; margin-bottom: 6px; }
+
+.menu-card button {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 7px 18px;
+  border-radius: 999px;
+  border: 2px solid var(--gold);
+  background: linear-gradient(180deg, #ff7a3c, #e1326b);
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  text-shadow: 0 2px 2px rgba(0, 0, 0, 0.65);
+}
+
+.menu-card button:hover { filter: brightness(1.15); }
+.menu-card button:active { transform: translateY(1px); }
+
+.save-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.save-row button {
+  padding: 5px 11px;
+  font-size: 12px;
+  background: #10233a;
+  border-color: var(--cyan);
+}
+
+#save-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: #0a2f1a;
+  border: 1px solid #52ff8c;
+  color: #82ff9e;
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.menu-main {
+  display: grid;
+  grid-template-columns: 452px 1fr;
+  gap: 14px;
+  text-align: left;
+  align-items: start;
+}
+
+.menu-mapcol { min-width: 0; }
+
+.menu-sidecol { min-width: 0; }
+
+.menu-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  text-align: left;
+  margin-top: 8px;
+}
+
+#chapter-list, #controls-card {
+  margin: 4px 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.32;
+}
+
+#chapter-list li, #controls-card li { margin: 1px 0; }
+
+#worldmap-canvas {
+  width: 420px;
+  max-width: 100%;
+  height: 300px;
+  border: 2px solid var(--cyan);
+  border-radius: 12px;
+  background: #06121f;
+}
+
+@media (max-width: 980px) {
+  #hud-root { font-size: 14px; }
+  #mission-banner { min-width: 0; width: 72vw; }
+  #mission-title { font-size: 20px; }
+  #status-cluster { width: 200px; }
+  #cash-value { font-size: 24px; }
+  #radar-cluster { width: 182px; }
+  #minimap-canvas { width: 164px; height: 164px; }
+  .menu-card { max-height: 94vh; overflow: auto; }
+  .menu-main { grid-template-columns: 1fr; }
+  #worldmap-canvas { width: min(420px, 80vw); height: auto; }
+}
