@@ -4,12 +4,6 @@ import * as THREE from 'three';
 import { WEAPON_IDS, WEAPON_SPECS } from './cityConfig.js';
 import { createCharacterRig, triggerMuzzleFlash } from './playerAndPeds.js';
 
-function glowMaterial(color) {
-  return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false });
-}
-
-// 4 weapons from WEAPON_SPECS: switching, ammo/reload, tracers, muzzle flash,
-// impact sparks, pulse-grenade arc + shockwave, guard squads, pickups, PVPD alerts.
 export class CombatAndWeaponsManager {
   constructor(scene, rng, opts = {}) {
     this.scene = scene;
@@ -30,13 +24,19 @@ export class CombatAndWeaponsManager {
     this.sparks = [];
     this.grenades = [];
     this.shockwaves = [];
-    this.guards = []; // { rig, pos, heading, hp, state, patrolA, patrolB, t, fireTimer, mesh... }
+    this.flashes = [];
+    this.guards = []; // { rig, pos, heading, hp, maxHp, state, patrolA, patrolB, t, fireTimer, bar... }
     this.pickups = []; // { mesh, kind: 'cash' | 'armor' | 'ammo', amount, pos, spin }
     this.onShoot = opts.onShoot || null;
     this.onExplosion = opts.onExplosion || null;
     this.onGuardDown = opts.onGuardDown || null;
     this.onVehicleHit = opts.onVehicleHit || null;
     this.time = 0;
+    this.camera = opts.camera || null;
+  }
+
+  setCamera(camera) {
+    this.camera = camera;
   }
 
   setContext(ctx = {}) {
@@ -84,6 +84,7 @@ export class CombatAndWeaponsManager {
     a.cooldown = 60 / s.rpm;
     a.mag -= 1;
     if (shooter === 'player' && this.player?.mesh) triggerMuzzleFlash(this.player.mesh);
+    this.spawnMuzzleSprite(origin);
     const pellets = s.pellets || 1;
     const hits = [];
     for (let i = 0; i < pellets; i += 1) {
@@ -157,7 +158,6 @@ export class CombatAndWeaponsManager {
     this.scene.add(ring);
     this.shockwaves.push({ mesh: ring, t: 0, max: s.blastRadius });
     this.spawnSparks(at, 0x7df3ff, 26);
-    // Damage guards / player / vehicles in the blast.
     for (const gd of [...this.guards]) {
       if (gd.pos.distanceTo(at) < s.blastRadius) {
         gd.hp -= s.damage;
@@ -181,19 +181,44 @@ export class CombatAndWeaponsManager {
   }
 
   spawnTracer(from, to) {
-    const len = from.distanceTo(to);
-    const geo = new THREE.BoxGeometry(0.12, 0.12, Math.max(0.5, len));
+    // Crisp 1.4m glowing bolt near the muzzle, fading fast.
+    const dir = to.clone().sub(from);
+    const len = dir.length();
+    if (len <= 0.01) return;
+    dir.normalize();
+    const boltLen = Math.min(1.4, len);
+    const start = from.clone();
+    const end = from.clone().addScaledVector(dir, boltLen);
+    const geo = new THREE.CylinderGeometry(0.035, 0.035, boltLen, 6, 1, true);
+    geo.rotateX(Math.PI / 2);
     const mesh = new THREE.Mesh(geo, glowMaterial(0xffe27a));
-    mesh.position.copy(from).lerp(to, 0.5);
-    mesh.lookAt(to);
+    mesh.position.copy(start).lerp(end, 0.5);
+    mesh.lookAt(end);
     this.scene.add(mesh);
-    this.tracers.push({ mesh, life: 0.07 });
+    this.tracers.push({ mesh, life: 0.07, max: 0.07 });
+  }
+
+  spawnMuzzleSprite(at) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: flashTexture(), color: 0xffe9a8, transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    m.position.copy(at);
+    m.scale.setScalar(0.9 + Math.random() * 0.5);
+    m.userData.life = 0.06;
+    m.userData.max = 0.06;
+    this.scene.add(m);
+    this.flashes.push(m);
   }
 
   spawnSparks(at, color = 0xffd97a, n = 8) {
     for (let i = 0; i < n; i += 1) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), glowMaterial(color));
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: sparkTexture(), color, transparent: true, opacity: 0.95,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
       m.position.copy(at);
+      m.scale.setScalar(0.2 + Math.random() * 0.25);
       m.userData.vel = new THREE.Vector3(
         (Math.random() - 0.5) * 10,
         Math.random() * 7,
@@ -216,19 +241,26 @@ export class CombatAndWeaponsManager {
         hair: 0x111111,
       });
       rig.position.set(x + (this.rng() - 0.5) * 12, 0, z + (this.rng() - 0.5) * 12);
+      // Guards carry a visible 3D gun while on duty.
+      if (rig.userData.gunMesh) rig.userData.gunMesh.visible = true;
       this.scene.add(rig);
       const gd = {
         rig,
         pos: rig.position,
         heading: this.rng() * Math.PI * 2,
         hp: 55,
+        maxHp: 55,
         state: 'patrol',
         patrolA: new THREE.Vector3(x - patrolRadius, 0, z),
         patrolB: new THREE.Vector3(x + patrolRadius, 0, z + 10),
         t: this.rng(),
         fireTimer: 1 + this.rng() * 2,
         phase: this.rng() * 10,
+        bar: null,
       };
+      gd.bar = makeHealthBar();
+      gd.bar.position.set(gd.pos.x, 2.4, gd.pos.z);
+      this.scene.add(gd.bar);
       this.guards.push(gd);
       squad.push(gd);
     }
@@ -238,8 +270,8 @@ export class CombatAndWeaponsManager {
   killGuard(gd) {
     const i = this.guards.indexOf(gd);
     if (i >= 0) this.guards.splice(i, 1);
+    if (gd.bar) this.scene.remove(gd.bar);
     gd.rig.rotation.x = Math.PI / 2;
-    // Drop cash or armor pickup where the guard fell.
     const kind = this.rng() < 0.6 ? 'cash' : 'armor';
     this.spawnPickup(gd.pos.x, gd.pos.z, kind, kind === 'cash' ? 150 + Math.floor(this.rng() * 250) : 25);
     setTimeout(() => this.scene.remove(gd.rig), 4000);
@@ -247,11 +279,46 @@ export class CombatAndWeaponsManager {
   }
 
   spawnPickup(x, z, kind, amount) {
-    const color = kind === 'cash' ? 0x52ff8c : kind === 'armor' ? 0x38e8ff : 0xffd97a;
-    const mesh = new THREE.Mesh(
-      kind === 'cash' ? new THREE.BoxGeometry(0.7, 0.4, 0.5) : new THREE.OctahedronGeometry(0.45),
-      new THREE.MeshBasicMaterial({ color }),
-    );
+    let mesh;
+    if (kind === 'cash') {
+      // Emerald cash stack: banded bills.
+      const g = new THREE.Group();
+      for (let i = 0; i < 5; i += 1) {
+        const bill = new THREE.Mesh(
+          new THREE.BoxGeometry(0.7, 0.07, 0.45),
+          new THREE.MeshLambertMaterial({ color: i % 2 ? 0x2fae5f : 0x52ff8c }),
+        );
+        bill.position.y = i * 0.075;
+        bill.rotation.y = (Math.random() - 0.5) * 0.2;
+        g.add(bill);
+      }
+      const band = new THREE.Mesh(
+        new THREE.BoxGeometry(0.74, 0.4, 0.16),
+        new THREE.MeshLambertMaterial({ color: 0xf2ead8 }),
+      );
+      band.position.y = 0.15;
+      g.add(band);
+      mesh = g;
+    } else if (kind === 'armor') {
+      // Cyan armor vest pickup.
+      const g = new THREE.Group();
+      const vest = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.65, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x38e8ff, emissive: 0x0a4a66, emissiveIntensity: 0.6, roughness: 0.4 }),
+      );
+      g.add(vest);
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 0.45, 0.28),
+        new THREE.MeshBasicMaterial({ color: 0x9be9ff }),
+      );
+      g.add(plate);
+      mesh = g;
+    } else {
+      mesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.45),
+        new THREE.MeshBasicMaterial({ color: 0xffd97a }),
+      );
+    }
     mesh.position.set(x, 0.9, z);
     this.scene.add(mesh);
     const p = { mesh, kind, amount, pos: mesh.position, spin: Math.random() * 6 };
@@ -330,10 +397,20 @@ export class CombatAndWeaponsManager {
     for (let i = this.tracers.length - 1; i >= 0; i -= 1) {
       const t = this.tracers[i];
       t.life -= dt;
-      t.mesh.material.opacity = Math.max(0, t.life / 0.07);
+      t.mesh.material.opacity = Math.max(0, t.life / t.max);
       if (t.life <= 0) {
         this.scene.remove(t.mesh);
         this.tracers.splice(i, 1);
+      }
+    }
+    for (let i = this.flashes.length - 1; i >= 0; i -= 1) {
+      const m = this.flashes[i];
+      m.userData.life -= dt;
+      m.material.opacity = Math.max(0, m.userData.life / m.userData.max);
+      m.scale.multiplyScalar(1 + dt * 4);
+      if (m.userData.life <= 0) {
+        this.scene.remove(m);
+        this.flashes.splice(i, 1);
       }
     }
     for (let i = this.sparks.length - 1; i >= 0; i -= 1) {
@@ -343,6 +420,7 @@ export class CombatAndWeaponsManager {
       m.position.addScaledVector(m.userData.vel, dt);
       if (m.position.y < 0.05) m.position.y = 0.05;
       m.material.opacity = Math.max(0, m.userData.life * 2);
+      m.scale.setScalar(Math.max(0.05, 0.25 * m.userData.life * 2));
       if (m.userData.life <= 0) {
         this.scene.remove(m);
         this.sparks.splice(i, 1);
@@ -402,6 +480,7 @@ export class CombatAndWeaponsManager {
             j.flashTimer = 0.06;
             j.muzzleFlash.material.opacity = 0.9;
           }
+          this.spawnMuzzleSprite(gd.pos.clone().setY(1.38));
           if (dist < 42 && this.rng() < 0.5) this.player.damage(3 + this.rng() * 6);
         }
       } else {
@@ -422,6 +501,15 @@ export class CombatAndWeaponsManager {
       }
       gd.rig.position.copy(gd.pos);
       gd.rig.rotation.y = gd.heading;
+      // Floating overhead health bar always faces the camera.
+      if (gd.bar) {
+        const frac = Math.max(0, gd.hp / gd.maxHp);
+        gd.bar.userData.fill.scale.x = Math.max(0.001, frac);
+        gd.bar.userData.fill.position.x = -(1 - frac) * 0.55;
+        gd.bar.position.set(gd.pos.x, 2.4, gd.pos.z);
+        const cam = this.camera || this.scene?.camera;
+        if (cam) gd.bar.lookAt(cam.position);
+      }
       const j = gd.rig.userData.joints;
       if (j) {
         const swing = Math.sin(gd.phase) * 0.5;
@@ -443,4 +531,64 @@ export class CombatAndWeaponsManager {
       }
     }
   }
+}
+
+function glowMaterial(color) {
+  return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false });
+}
+
+function makeHealthBar() {
+  const g = new THREE.Group();
+  const back = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 0.14),
+    new THREE.MeshBasicMaterial({ color: 0x11131c, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  g.add(back);
+  const fill = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.1, 0.09),
+    new THREE.MeshBasicMaterial({ color: 0x52ff8c, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }),
+  );
+  fill.position.z = 0.01;
+  g.add(fill);
+  g.userData.fill = fill;
+  return g;
+}
+
+let _flashTex = null;
+function flashTexture() {
+  if (_flashTex) return _flashTex;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 1, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.3, 'rgba(255,240,180,0.8)');
+  g.addColorStop(0.6, 'rgba(255,200,90,0.25)');
+  g.addColorStop(1, 'rgba(255,180,60,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  _flashTex = new THREE.CanvasTexture(c);
+  _flashTex.minFilter = THREE.LinearFilter;
+  _flashTex.magFilter = THREE.LinearFilter;
+  return _flashTex;
+}
+
+let _sparkTex = null;
+function sparkTexture() {
+  if (_sparkTex) return _sparkTex;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 1, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  _sparkTex = new THREE.CanvasTexture(c);
+  _sparkTex.minFilter = THREE.LinearFilter;
+  _sparkTex.magFilter = THREE.LinearFilter;
+  return _sparkTex;
 }

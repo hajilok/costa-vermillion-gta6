@@ -1,4 +1,5 @@
 // Costa Vermillion: Sunset Syndicate — a gta6-01 entry (Node 22, standard library only).
+// snapshot: sunset chase / heist combat / harbor run / split-deck showroom map.
 // The game is this directory's game/ folder: plain static files a desktop browser loads
 // offline (game/index.html plus its ES modules, Three.js vendored under game/vendor/, no
 // network requests). This program validates game/ and screenshots/, copies them to

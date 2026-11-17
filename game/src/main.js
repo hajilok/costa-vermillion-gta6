@@ -3,17 +3,17 @@
 // 100% original content. No Rockstar / GTA content.
 // ?shot=cover|combat|marina|map (&seed=N) stages a deterministic screenshot scene.
 import * as THREE from 'three';
-import { createSeededRandom, districtAt, isWater, landmarkById } from './cityConfig.js';
+import { WEAPON_IDS, createSeededRandom, districtAt, isWater, landmarkById, streetNameAt } from './cityConfig.js';
 import { buildCoastalCityWorld } from './cityBuilder.js';
 import { VehiclePhysicsController, createVehicleMesh } from './vehicleSystem.js';
+import { WantedAndPoliceDirector } from './wantedAndPolice.js';
 import { PedestrianCrowdManager, PlayerCharacterController, createCharacterRig } from './playerAndPeds.js';
 import { CityTrafficManager } from './trafficSystem.js';
-import { WantedAndPoliceDirector } from './wantedAndPolice.js';
 import { CombatAndWeaponsManager } from './combatSystem.js';
 import { SaveGameManager, StoryCampaignManager } from './storyAndMissions.js';
-import { DynamicCameraController } from './cameraRig.js';
 import { HudAndRadarController } from './hudAndMap.js';
 import { WebAudioEngineAndRadio } from './audioAndRadio.js';
+import { DynamicCameraController } from './cameraRig.js';
 import { stageScreenshotScenario } from './sceneShots.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -54,6 +54,7 @@ const combat = new CombatAndWeaponsManager(scene, rng, {
     police.addHeat(0.35);
   },
 });
+combat.setCamera(camera);
 const story = new StoryCampaignManager({ city });
 const saves = new SaveGameManager('sunset');
 const hud = new HudAndRadarController({
@@ -242,22 +243,34 @@ function renderHud() {
   const ammo = combat.ammoStatus();
   story.refreshRoute();
   const target = story.missionTarget;
+  const weaponSlot = Math.max(1, WEAPON_IDS.indexOf(combat.current) + 1);
   hud.updateHud({
     chapter: `Chapter ${story.chapter.chapter} — ${story.chapter.title}`,
     title: target.name,
     objective: story.objectiveText(),
     dist: story.missionDistance(),
+    progress: Math.min(1, story.objectiveIndex / Math.max(1, story.chapter.objectives.length)),
     stars: police.heat,
     wantedLabel: police.wantedLabel(),
+    pursuit: police.tacticalUnits(player.pos),
     cash: story.cash,
     respect: story.respect,
     rank: StoryCampaignManager.rankFor(story.respect),
     weapon: ammo.spec.label,
+    weaponSlot,
+    weaponAmmo: {
+      1: `${combat.arms.viper_pistol.mag} / ${combat.arms.viper_pistol.reserve}`,
+      2: `${combat.arms.coral_smg.mag} / ${combat.arms.coral_smg.reserve}`,
+      3: `${combat.arms.breacher_shotgun.mag} / ${combat.arms.breacher_shotgun.reserve}`,
+      4: `${combat.arms.pulse_grenade.mag} / ${combat.arms.pulse_grenade.reserve}`,
+    },
     ammo: `${ammo.mag} / ${ammo.reserve}`,
     radio: audio.station.name,
     district: hud.districtNameAt(player.pos.x, player.pos.z),
+    street: streetNameAt(player.pos.x, player.pos.z),
     health: player.health,
     armor: player.armor,
+    clockMinutes: 18 * 60 + 42 + Math.floor(elapsed / 60),
     speedMph: driving ? Math.abs(ctrl.speed) * 3.6 : Math.abs(player.speed) * 3.6,
     // Staged hero cars hold explicit .gear; live driving recomputes it in
     // VehiclePhysicsController.update. Never show 'P' (or '1') while moving.

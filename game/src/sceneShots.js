@@ -36,19 +36,6 @@ function settle(g, seconds = 0.5) {
   for (let i = 0; i < n; i += 1) g.stepFrame(dt, true);
 }
 
-// Lock the camera explicitly behind a heading: dist back, height up, look-ahead.
-function lockCamera(g, targetPos, heading, dist, height, lookAhead = 7, fov = 62) {
-  const back = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
-  g.camera.position.copy(targetPos).addScaledVector(back, dist);
-  g.camera.position.y = Math.max(1.8, targetPos.y + height);
-  const look = targetPos.clone().addScaledVector(back, -lookAhead);
-  look.y = targetPos.y + 1.4;
-  g.camera.lookAt(look);
-  g.camera.fov = fov;
-  g.camera.updateProjectionMatrix();
-  g.camera.updateMatrixWorld(true);
-}
-
 function syncMesh(ctrl) {
   ctrl.mesh.position.copy(ctrl.pos);
   ctrl.mesh.rotation.set(0, ctrl.heading, 0);
@@ -68,40 +55,39 @@ function forwardOf(heading) {
   return new THREE.Vector3(-Math.sin(heading), 0, -Math.cos(heading));
 }
 
-// 'cover': Elena drifts a coral Veloce GT straight down the open westernmost
-// coastal avenue (avenues[0], beside the beach), -Z vista: ocean + umbrellas
-// left, Mariposa + pastel towers right, sun disc ahead, 2 strobing Interceptors
-// 7m left-rear + 11m right-rear, 3 traffic cars ahead, drift smoke + cyan nitro,
-// Hawk heli 15m up / 28m ahead with a bright road cone.
+// 'cover': coral-crimson Veloce GT power-slide drift down Coral Avenue at 164 MPH,
+// 3/4 left-offset cinematic chase into the sunset, Hawk heli in the upper sky.
 function stageCover(g) {
   g.story.startChapter(3);
-  g.story.cash = 18450;
+  g.story.cash = 24850;
   g.story.respect = 210;
-  // Dead-center of ROAD_NETWORK.avenues[0] (x=-440), physics heading straight
-  // down the open avenue corridor (-Z => heading 0). Drift yaw lives on the MESH
-  // only; physics/camera use heading 0 so the 900m vista stays building-free.
   const heading = 0;
-  const car = g.driveVehicle('veloce_gt', -440, 190, heading, 0xff5a4e);
+  const car = g.driveVehicle('veloce_gt', -441.2, 189.5, heading, 0xff3355);
   warmup(g, 1.4);
-  car.pos.set(-440, 0.35, 190);
+  car.pos.set(-441.2, 0.35, 189.5);
   car.heading = heading;
-  car.speed = 41; // ~148 KM/H
+  car.speed = 45.6; // 164 MPH
   car.gear = 5;
-  car.nitro = 0.45;
+  car.nitro = 0.6;
   car.nitroActive = true;
   car.handbrake = true;
-  car.steer = 0.45;
-  g.player.pos.set(-440, 0, 190);
+  car.steer = 0.52;
+  g.player.pos.set(-441.2, 0, 189.5);
   g.player.heading = heading;
   g.player.mesh.visible = false;
   car.mesh.position.copy(car.pos);
-  car.mesh.rotation.set(0, heading + 0.14, 0); // mesh-only drift yaw
+  car.mesh.rotation.set(0, 0.52, -0.04);
   car.mesh.updateMatrixWorld(true);
-  car.spawnDriftSmoke(1 / 60, true);
-  car.spawnDriftSmoke(1 / 60, true);
-  car.spawnDriftSmoke(1 / 60, false, 0x38e8ff); // cyan nitro exhaust flames
+  // Clear any ambient traffic photobombing the bottom-left lens near Coral Ave.
+  for (const v of [...g.traffic.vehicles]) {
+    if (v.controller !== car && v.controller.pos.z > 192 && Math.abs(v.controller.pos.x + 440) < 30) {
+      g.traffic.removeVehicle(v);
+    }
+  }
+  // 2 gentle wispy puffs + cyan nitro (never obscuring the hero car).
+  car.spawnDriftSmoke(1 / 60, false);
+  car.spawnDriftSmoke(1 / 60, false);
   car.spawnDriftSmoke(1 / 60, false, 0x38e8ff);
-  // 2 strobing PVPD Interceptors visibly chasing 7m left-rear + 11m right-rear.
   g.police.heatValue = 4;
   g.police.heat = 4;
   g.police.cooldownTimer = 999;
@@ -110,95 +96,107 @@ function stageCover(g) {
   g.police.pursuers.length = 0;
   g.police.spawnPursuer(g.player.pos);
   g.police.spawnPursuer(g.player.pos);
-  const fwd = forwardOf(heading);
+  // Both Interceptors chase forward down the avenue (heading 0, never backward).
+  const spots = [
+    { x: -437.2, z: 195.8 },
+    { x: -443.8, z: 197.2 },
+  ];
   g.police.pursuers.forEach((p, i) => {
-    const back = i === 0 ? 7 : 11;
-    const lane = i === 0 ? -3.2 : 3.2;
-    p.controller.pos.copy(car.pos).addScaledVector(fwd, -back);
-    p.controller.pos.x += lane;
-    p.controller.pos.y = 0.35;
-    p.controller.heading = heading;
-    p.controller.speed = 36;
-    p.controller.gear = i === 0 ? 5 : 4;
+    p.controller.pos.set(spots[i].x, 0.35, spots[i].z);
+    p.controller.heading = 0;
+    p.controller.speed = 38;
+    p.controller.gear = 5;
     syncMesh(p.controller);
   });
   g.police.syncForces();
-  // 3 traffic cars ahead in the lanes down the open avenue (no roadblocks ahead).
-  const lanes = [
-    { dx: -3.2, ahead: 26, spec: 'brisa_cabrio' },
-    { dx: 3.2, ahead: 38, spec: 'dune_titan' },
-    { dx: 0.4, ahead: 56, spec: 'sol_moto' },
-  ];
-  for (const L of lanes) {
-    const v = g.traffic.spawnTrafficVehicle(true, L.spec, {
-      x: car.pos.x + L.dx, z: car.pos.z, heading,
-      road: { kind: 'avenue', id: 'ave_coral' }, dir: 1,
-    });
-    v.ai = null; // hold formation for the frame
-    v.controller.pos.set(car.pos.x + L.dx, 0.35, car.pos.z).addScaledVector(fwd, L.ahead);
-    v.controller.heading = heading;
-    v.controller.speed = 18;
-    syncMesh(v.controller);
-  }
-  // Hawk helicopter hovering 15m up + 28m ahead in open sky, cone onto the road.
+  // 3D PVPD Hawk left in the open pink-gold sunset sky, clear of the sign.
   if (!g.police.heli) g.police.syncForces();
   if (g.police.heli) {
-    const hp = car.pos.clone().addScaledVector(fwd, 28);
-    hp.y = car.pos.y + 15;
-    g.police.heliPos.copy(hp);
-    g.police.heli.position.copy(hp);
-    g.police.heli.rotation.y = Math.atan2(-(car.pos.x - hp.x), -(car.pos.z - hp.z));
+    g.police.heliPos.set(-452.5, 11.8, 158.0);
+    g.police.heli.position.copy(g.police.heliPos);
+    g.police.heli.rotation.y = Math.PI;
     g.police.heli.userData.cone.material.opacity = 0.34;
     g.police.heli.userData.cone.scale.set(1.4, 1.4, 1.4);
     g.police.heli.updateMatrixWorld(true);
-    // Beacon 120m ahead down ave_coral — never on top of the hero car.
     g.city.setBeaconPosition(-440, 70);
   }
-  g.hud.showDialogue('MATEO CRUZ', 'Elena, the Keys run starts now — lose them on the Promenade!', 999);
+  g.hud.showDialogue('MATEO CRUZ', 'Lose that PVPD Hawk before you bring the Veloce near the Keys!', 999);
   g.hud.setHint('Drift: SPACE · Nitro: SHIFT · Wanted ★★★★', 999);
   settle(g, 0.4);
-  // Re-assert hero blocking after the settle (mesh-only drift yaw again),
-  // then lock camera down the open avenue (no cameraRig overwrite).
-  car.pos.set(-440, 0.35, 190);
+  // Re-assert the side-profile drift pose after the settle.
+  car.pos.set(-441.2, 0.35, 189.5);
   car.heading = heading;
   car.mesh.position.copy(car.pos);
-  car.mesh.rotation.set(0, heading + 0.14, -0.06);
+  car.mesh.rotation.set(0, 0.52, -0.04);
   car.mesh.updateMatrixWorld(true);
-  car.spawnDriftSmoke(1 / 60, true);
+  for (const v of [...g.traffic.vehicles]) {
+    if (v.controller !== car && v.controller.pos.z > 192 && Math.abs(v.controller.pos.x + 440) < 30) {
+      g.traffic.removeVehicle(v);
+    }
+  }
+  car.spawnDriftSmoke(1 / 60, false);
   car.spawnDriftSmoke(1 / 60, false, 0x38e8ff);
-  g.police.pursuers.forEach((p) => syncMesh(p.controller));
+  g.police.pursuers.forEach((p) => { p.controller.heading = 0; syncMesh(p.controller); });
+  if (g.police.heli) {
+    g.police.heliPos.set(-452.5, 11.8, 158.0);
+    g.police.heli.position.copy(g.police.heliPos);
+    g.police.heli.rotation.y = Math.PI;
+    g.police.heli.updateMatrixWorld(true);
+  }
   g.scene.updateMatrixWorld(true);
-  lockCamera(g, car.pos, heading, 9.5, 3.3, 9, 64);
+  // Right/east-side camera: beach + ocean left, hotels right, sunset ahead.
+  g.camera.position.set(-435.5, 2.45, 201.5);
+  g.camera.lookAt(new THREE.Vector3(-446.5, 2.5, 150));
+  g.camera.fov = 60;
+  g.camera.updateProjectionMatrix();
+  g.camera.updateMatrixWorld(true);
   g.renderer.render(g.scene, g.camera);
   finish(g);
   return true;
 }
 
-// 'combat': over-shoulder SMG aim vs 4 guards by a Boveda truck (13m) + cruiser (19m).
+// 'combat': TRUE over-the-shoulder right-offset view, Elena in the left third,
+// reticle on the Boveda truck, 4 armed guards with health bars, short tracers.
 function stageCombat(g) {
   g.story.startChapter(2);
   g.story.cash = 9200;
   g.story.respect = 120;
-  // Busy paved downtown intersection (Central Ave x Vermillion Blvd).
   const ex = -60;
   const ez = -40;
-  const heading = Math.PI * 0.85;
+  const heading = 0.28;
+  g.combat.setCamera(g.camera);
   g.player.teleport(ex, ez, heading);
   g.player.aiming = true;
+  g.player.update(1 / 60, { moveX: 0, moveZ: 0, sprint: false, aim: true });
   g.combat.selectWeapon('coral_smg');
   warmup(g, 1.2);
   g.player.pos.set(ex, 0, ez);
   g.player.heading = heading;
   g.player.mesh.position.copy(g.player.pos);
   g.player.mesh.rotation.set(0, heading, 0);
-  // 4 syndicate guards in a visible arc 8–12m ahead of Elena.
-  g.combat.guards.slice().forEach((gd) => g.scene.remove(gd.rig));
+  if (g.player.mesh.userData.gunMesh) g.player.mesh.userData.gunMesh.visible = true;
+  const j0 = g.player.mesh.userData.joints;
+  if (j0) {
+    j0.armR.shoulder.rotation.x = -Math.PI / 2 + 0.12;
+    j0.armR.elbow.rotation.x = 0;
+    j0.armL.shoulder.rotation.x = -Math.PI / 2 + 0.3;
+  }
+  g.player.mesh.updateMatrixWorld(true);
+  // Re-seat the SMG in Elena's right palm (never floating beside the arm).
+  g.player.mesh.updateMatrixWorld(true);
+  if (g.player.mesh.userData.gunMesh) {
+    const palm = new THREE.Vector3();
+    g.player.mesh.userData.joints.armR.hand.getWorldPosition(palm);
+    g.player.mesh.worldToLocal(palm);
+    g.player.mesh.userData.gunMesh.position.copy(palm).add(new THREE.Vector3(0, -0.06, -0.1));
+  }
+  for (const gd of g.combat.guards) { if (gd.bar) g.scene.remove(gd.bar); g.scene.remove(gd.rig); }
   g.combat.guards.length = 0;
-  g.combat.spawnGuardSquad(ex + 6, ez - 14, 4, 6);
+  g.combat.spawnGuardSquad(ex + 2, ez - 16, 4, 6);
   const fwd = forwardOf(heading);
   g.combat.guards.forEach((gd, i) => {
-    const off = (i - 1.5) * 3.2;
-    gd.pos.copy(g.player.pos).addScaledVector(fwd, 9 + (i % 2) * 3);
+    const off = (i - 1.5) * 2.6;
+    gd.pos.copy(g.player.pos).addScaledVector(fwd, 9 + (i % 2) * 4);
     gd.pos.x += -fwd.z * off;
     gd.pos.z += fwd.x * off;
     gd.pos.y = 0;
@@ -212,11 +210,10 @@ function stageCombat(g) {
     }
     gd.rig.updateMatrixWorld(true);
   });
-  // Boveda armored truck broadside 13m ahead; strobing cruiser 19m ahead-left.
   const truck = g.traffic.vehicles.find((v) => v.specId === 'boveda_armored' && v.parked)
     || g.traffic.spawnTrafficVehicle(true, 'boveda_armored', { x: ex, z: ez, heading, road: { kind: 'boulevard', id: 'blvd_vermillion' }, dir: 1 });
   truck.ai = null;
-  truck.controller.pos.copy(g.player.pos).addScaledVector(fwd, 13);
+  truck.controller.pos.copy(g.player.pos).addScaledVector(fwd, 13.5);
   truck.controller.pos.y = 0.35;
   truck.controller.heading = heading + Math.PI / 2;
   truck.controller.speed = 0;
@@ -229,16 +226,16 @@ function stageCombat(g) {
   g.police.pursuers.length = 0;
   g.police.spawnPursuer(g.player.pos);
   const cop = g.police.pursuers[0];
-  cop.controller.pos.copy(g.player.pos).addScaledVector(fwd, 19);
-  cop.controller.pos.x -= 4;
+  cop.controller.pos.copy(g.player.pos).addScaledVector(fwd, 18);
+  cop.controller.pos.x += 6;
   cop.controller.pos.y = 0.35;
   cop.controller.heading = heading + Math.PI;
   syncMesh(cop.controller);
   g.city.setBeaconPosition(ex + 10, ez - 20);
-  // 6 fleeing pedestrians with raised arms around the firefight.
+  // Fleeing hands-up peds kept on dry sidewalks beside the road.
   g.crowd.peds.slice(0, 6).forEach((ped, i) => {
     const a = (i / 6) * Math.PI * 2;
-    ped.pos.set(ex + Math.cos(a) * 9, 0, ez + Math.sin(a) * 9);
+    ped.pos.set(ex + Math.cos(a) * 10 + 24, 0, ez + Math.sin(a) * 10);
     ped.state = 'flee';
     ped.fleeTimer = 99;
     const j = ped.rig.userData.joints;
@@ -252,103 +249,117 @@ function stageCombat(g) {
   g.hud.showDialogue('ELENA VEGA', 'Bahia crew, stand down — this cargo rides with us now.', 999);
   g.hud.setHint('[F] Hijack Boveda Armored · 1-4 weapons · G grenade', 999);
   settle(g, 0.35);
-  // Warm golden street light over the intersection: Elena + truck + cruiser
-  // + guards all vividly lit for the frame.
   const keyLight = new THREE.PointLight(0xffc98a, 320, 70, 1.6);
   keyLight.position.set(ex + 4, 9, ez - 8);
   g.scene.add(keyLight);
   const rimLight = new THREE.PointLight(0xff9e5a, 140, 50, 1.6);
   rimLight.position.set(ex - 6, 5, ez - 16);
   g.scene.add(rimLight);
-  // Re-assert Elena + fire a live burst LAST: muzzle flash + 4 thick hero
-  // tracer beams + spark bursts flying at the guards, unmissable in frame.
+  // Re-assert Elena's aim pose; muzzle flash + guard muzzle flashes last.
   g.player.pos.set(ex, 0, ez);
   g.player.mesh.position.copy(g.player.pos);
   g.player.mesh.rotation.set(0, heading, 0);
+  if (g.player.mesh.userData.gunMesh) g.player.mesh.userData.gunMesh.visible = true;
   g.player.mesh.updateMatrixWorld(true);
-  const burst = [g.player.fireWeapon(), g.player.fireWeapon(), g.player.fireWeapon(), g.player.fireWeapon()]
-    .filter(Boolean);
-  for (const s of burst) g.combat.fire(s.from, s.dir, 'player');
-  // 4 sleek rifle tracers: thin emissive cores starting at the SMG muzzle in
-  // front of Elena (never overlapping her torso), one per guard, + spark bursts.
-  const muzzleBase = g.player.pos.clone().addScaledVector(fwd, 0.9);
-  muzzleBase.y = 1.45;
-  g.combat.guards.forEach((gd, i) => {
-    const from = muzzleBase.clone();
-    from.x += -fwd.z * (i - 1.5) * 0.35;
-    from.z += fwd.x * (i - 1.5) * 0.35;
-    const to = gd.pos.clone();
-    to.y = 1.1;
-    const len = Math.max(1, from.distanceTo(to));
-    const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.06, len),
-      new THREE.MeshBasicMaterial({ color: i % 2 ? 0xffb02e : 0xffe27a }),
-    );
-    beam.position.copy(from).lerp(to, 0.5);
-    beam.lookAt(to);
-    g.scene.add(beam);
-    const halo = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 0.14, len),
-      new THREE.MeshBasicMaterial({ color: 0xff7a1e, transparent: true, opacity: 0.35, depthWrite: false }),
-    );
-    halo.position.copy(beam.position);
-    halo.lookAt(to);
-    g.scene.add(halo);
-    g.combat.spawnSparks(to, 0xffc44d, 14);
-    g.combat.spawnSparks(to, 0xfff3d6, 8);
-  });
+  const shot = g.player.fireWeapon();
+  if (shot) g.combat.fire(shot.from, shot.dir, 'player');
+  // 3 crisp SHORT 1.3m tracer bolts mid-air ahead of Elena's barrel + sparks.
+  const muzzle = g.player.pos.clone().addScaledVector(fwd, 1.2);
+  muzzle.y = 1.38;
+  for (let i = 0; i < 3; i += 1) {
+    const from = muzzle.clone().addScaledVector(fwd, i * 1.5);
+    const to = from.clone().addScaledVector(fwd, 1.3);
+    g.combat.spawnTracer(from, to);
+    g.combat.spawnSparks(to, 0xffe27a, 6);
+  }
+  for (const gd of g.combat.guards) {
+    const hit = gd.pos.clone();
+    hit.y = 1.2;
+    g.combat.spawnSparks(hit, 0xffc44d, 6);
+  }
+  // 2 emerald cash stacks + cyan armor pickup staged on the road.
+  g.combat.spawnPickup(ex + 4, ez - 12, 'cash', 250);
+  g.combat.spawnPickup(ex - 3, ez - 14, 'cash', 180);
+  g.combat.spawnPickup(ex + 1, ez - 11, 'armor', 25);
   g.scene.updateMatrixWorld(true);
-  lockCamera(g, g.player.pos, heading, 4.2, 2.0, 10, 58);
+  // TRUE parallel right-shoulder OTS: right = fwd x up = (-fwd.z, 0, fwd.x).
+  const back = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+  const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const eye = g.player.pos.clone().addScaledVector(back, 3.3).addScaledVector(right, 0.95);
+  eye.y = g.player.pos.y + 1.65;
+  const look = g.player.pos.clone().addScaledVector(fwd, 13).addScaledVector(right, 0.95);
+  look.y = g.player.pos.y + 1.35;
+  g.camera.position.copy(eye);
+  g.camera.lookAt(look);
+  g.camera.fov = 55;
+  g.camera.updateProjectionMatrix();
+  g.camera.updateMatrixWorld(true);
   g.renderer.render(g.scene, g.camera);
   finish(g);
   return true;
 }
 
-// 'marina': 10m behind / 3.8m above the speedboat, causeway + beacon dead ahead.
+// 'marina': 118 MPH speedboat run under the Flamingo Causeway, feathered wake only.
 function stageMarina(g) {
   g.story.startChapter(3);
   g.story.cash = 12600;
   g.story.respect = 168;
-  // Vermillion Bay water (clear of ave_bahia x=300 and ave_torre x=120),
-  // bow aimed under the Flamingo Causeway so the bridge fills the frame.
-  const from = { x: 225, z: -85 };
-  const aimX = 265;
-  const aimZ = -185;
+  const from = { x: 232, z: -92 };
+  const aimX = 272;
+  const aimZ = -195;
   const heading = Math.atan2(-(aimX - from.x), -(aimZ - from.z));
   const boat = g.driveVehicle('marea_speedboat', from.x, from.z, heading);
   warmup(g, 1.4);
-  boat.pos.set(from.x, 0.35, from.z);
+  boat.pos.set(from.x, 0.24, from.z);
   boat.heading = heading;
-  boat.speed = 30;
+  boat.speed = 32.8; // 118 MPH
   boat.gear = 4;
   g.player.pos.copy(boat.pos);
   g.player.heading = heading;
   g.player.mesh.visible = false;
   syncMesh(boat);
-  boat.mesh.position.y = 0.35;
+  boat.mesh.position.y = 0.24;
   boat.mesh.updateMatrixWorld(true);
-  // Bright white V-wake foam + tall glowing beacon dead ahead on the bay.
-  boat.mesh.userData.wake.material.opacity = 0.9;
+  // Feathered radial canvas wake only (the hull's own wake texture, boosted).
+  boat.mesh.userData.wake.material.opacity = 0.78;
   boat.mesh.userData.wake.scale.set(1.2, 1.6, 1);
-  const wake2 = new THREE.Mesh(
-    new THREE.PlaneGeometry(5.2, 9),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }),
-  );
-  wake2.rotation.x = -Math.PI / 2;
-  wake2.position.set(from.x, 0.14, from.z).addScaledVector(forwardOf(heading), -7.5);
-  g.scene.add(wake2);
   g.city.setBeaconPosition(aimX, aimZ);
   g.story.refreshRoute();
   g.police.clearHeat();
+  // PVPD Hawk low beside the causeway towers, fully in-frame with its beam.
+  g.police.heatValue = 3;
+  g.police.heat = 3;
+  g.police.cooldownTimer = 999;
+  g.police.lastPlayer = g.player.pos.clone();
+  g.police.syncForces();
+  if (g.police.heli) {
+    g.police.heliPos.set(256, 13.5, -142);
+    g.police.heli.position.copy(g.police.heliPos);
+    g.police.heli.userData.cone.material.opacity = 0.3;
+    g.police.heli.updateMatrixWorld(true);
+  }
   settle(g, 0.4);
   syncMesh(boat);
-  boat.mesh.position.y = 0.35;
-  boat.mesh.userData.wake.material.opacity = 0.9;
-  boat.mesh.updateMatrixWorld(true);
-  wake2.position.set(boat.pos.x, 0.14, boat.pos.z).addScaledVector(forwardOf(boat.heading), -7.5);
-  wake2.updateMatrixWorld(true);
+  boat.mesh.position.y = 0.24;
+  boat.mesh.userData.wake.material.opacity = 0.78;
+  if (g.police.heli) {
+    g.police.heliPos.set(256, 13.5, -142);
+    g.police.heli.position.copy(g.police.heliPos);
+    g.police.heli.updateMatrixWorld(true);
+  }
   g.scene.updateMatrixWorld(true);
-  lockCamera(g, boat.pos, heading, 10, 3.8, 16, 60);
+  // 9.2m back, 2.1m left, 3.3m up chase cam under the causeway.
+  const back = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+  const right = new THREE.Vector3(-back.z, 0, back.x);
+  const eye = boat.pos.clone().addScaledVector(back, 9.2).addScaledVector(right, -2.1);
+  eye.y = boat.pos.y + 3.3;
+  const look = boat.pos.clone().addScaledVector(forwardOf(heading), 14);
+  look.y = 0.6;
+  g.camera.position.copy(eye);
+  g.camera.lookAt(look);
+  g.camera.fov = 58;
+  g.camera.updateProjectionMatrix();
+  g.camera.updateMatrixWorld(true);
   g.renderer.render(g.scene, g.camera);
   g.hud.showDialogue('ELENA VEGA', 'Tidebreaker Run — full throttle under the Causeway!', 999);
   g.hud.setHint('Marea Speedboat · SHIFT nitro · follow the gold GPS line', 999);
@@ -356,14 +367,22 @@ function stageMarina(g) {
   return true;
 }
 
-// 'map': elevated panoramic sunset skyline behind the open 2-column menu.
+// 'map': Split Command Deck + live Coral Avenue sunset showroom on the right.
 function stageMap(g) {
   g.story.startChapter(1);
-  g.story.cash = 18450;
+  g.story.cash = 24850;
   g.story.respect = 210;
   g.story.chapterIndex = 3;
   g.story.objectiveIndex = 1;
-  g.player.teleport(-300, 150, Math.PI * 1.2);
+  // Showcase trio + Elena on the RIGHT half: open Coral Avenue, palms + Mariposa behind.
+  g.traffic.parkCar('veloce_gt', -431, 170, Math.PI / 8, 0xffc44d);
+  g.traffic.parkCar('brisa_cabrio', -433, 166, Math.PI / 8, 0x38e8ff);
+  g.traffic.parkCar('veloce_gt', -435, 162, Math.PI / 8, 0xff5a4e);
+  g.player.teleport(-433, 174, Math.PI);
+  g.player.mesh.visible = true;
+  g.player.mesh.position.copy(g.player.pos);
+  g.player.mesh.rotation.set(0, Math.PI, 0);
+  g.player.mesh.updateMatrixWorld(true);
   g.city.setBeaconPosition(-330, 210);
   g.story.refreshRoute();
   try {
@@ -371,11 +390,10 @@ function stageMap(g) {
   } catch { /* menu still renders without storage */ }
   warmup(g, 1.0);
   g.scene.updateMatrixWorld(true);
-  // Elevated panoramic camera: menu glass over a live golden-hour skyline.
-  const eye = new THREE.Vector3(-380, 72, 300);
-  g.camera.position.copy(eye);
-  g.camera.lookAt(new THREE.Vector3(60, 28, -120));
-  g.camera.fov = 55;
+  // Wide open avenue: palms, Hotel Mariposa + sunset skyline behind the trio.
+  g.camera.position.set(-446, 2.5, 184);
+  g.camera.lookAt(new THREE.Vector3(-431, 2.8, 154));
+  g.camera.fov = 58;
   g.camera.updateProjectionMatrix();
   g.camera.updateMatrixWorld(true);
   g.renderer.render(g.scene, g.camera);
@@ -387,7 +405,7 @@ function stageMap(g) {
     route: g.story.route, target: g.story.missionTarget,
   });
   const badge = document.getElementById('save-badge');
-  if (badge) badge.textContent = 'Slot 1: Ch.4 · $18,450 · Saved';
+  if (badge) badge.textContent = 'Slot 1: Ch.4 · $24,850 · Saved';
   g.renderer.render(g.scene, g.camera);
   g.renderer.render(g.scene, g.camera);
   window.__SHOT_READY = true;

@@ -75,10 +75,11 @@ export class DynamicCameraController {
     let height = 4.2;
     let side = 0;
     if (!focus.driving && focus.aiming) {
-      // Over-the-shoulder combat cam: tight, offset right, lower pitch.
-      dist = 3.4;
-      height = 2.1;
-      side = 1.1;
+      // Right-shoulder aim cam: 1.05m right, 1.68m up, 3.3m back, so the
+      // #aim-reticle sits in open space ahead of Elena, never on her head.
+      dist = 3.3;
+      height = 1.68;
+      side = 1.05;
     } else if (!focus.driving) {
       dist = 6.4;
       height = 3.2;

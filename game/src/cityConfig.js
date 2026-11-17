@@ -105,22 +105,23 @@ export function isWater(x, z) {
 }
 
 // Grid roads. Avenues run north-south (constant X), boulevards run east-west (constant Z).
+// Explicit spans keep asphalt off VERMILLION_BAY water: the causeway alone bridges it.
 export const ROAD_NETWORK = {
   avenues: [
-    { id: 'ave_coral', name: 'Coral Avenue', x: -440, width: 12 },
-    { id: 'ave_mariposa', name: 'Mariposa Avenue', x: -260, width: 12 },
-    { id: 'ave_central', name: 'Central Avenida', x: -60, width: 16 },
-    { id: 'ave_torre', name: 'Torre Avenue', x: 120, width: 16 },
-    { id: 'ave_bahia', name: 'Bahia Avenue', x: 300, width: 12 },
-    { id: 'ave_keys', name: 'Keys Palm Avenue', x: 450, width: 10 },
+    { id: 'ave_coral', name: 'Coral Avenue', x: -440, width: 12, minZ: -640, maxZ: 590 },
+    { id: 'ave_mariposa', name: 'Mariposa Avenue', x: -260, width: 12, minZ: -640, maxZ: 590 },
+    { id: 'ave_central', name: 'Central Avenida', x: -60, width: 16, minZ: -640, maxZ: 590 },
+    { id: 'ave_torre', name: 'Torre Avenue', x: 120, width: 16, minZ: -640, maxZ: 590 },
+    { id: 'ave_bahia', name: 'Bahia Avenue', x: 300, width: 12, minZ: 150, maxZ: 560 },
+    { id: 'ave_keys', name: 'Keys Palm Avenue', x: 450, width: 10, minZ: -520, maxZ: -150 },
   ],
   boulevards: [
-    { id: 'blvd_sol', name: 'Sol Boulevard', z: -420, width: 14 },
-    { id: 'blvd_neon', name: 'Neon Boulevard', z: -220, width: 12 },
-    { id: 'blvd_vermillion', name: 'Vermillion Boulevard', z: -40, width: 18 },
-    { id: 'blvd_palmera', name: 'Palmera Boulevard', z: 160, width: 12 },
-    { id: 'blvd_carga', name: 'Carga Boulevard', z: 360, width: 14 },
-    { id: 'blvd_keys', name: 'Starlight Boulevard', z: -330, width: 10 },
+    { id: 'blvd_sol', name: 'Sol Boulevard', z: -420, width: 14, minX: -560, maxX: 176 },
+    { id: 'blvd_neon', name: 'Neon Boulevard', z: -220, width: 12, minX: -560, maxX: 176 },
+    { id: 'blvd_vermillion', name: 'Vermillion Boulevard', z: -40, width: 18, minX: -560, maxX: 176 },
+    { id: 'blvd_palmera', name: 'Palmera Boulevard', z: 160, width: 12, minX: -560, maxX: 176 },
+    { id: 'blvd_carga', name: 'Carga Boulevard', z: 360, width: 14, minX: -560, maxX: 560 },
+    { id: 'blvd_keys', name: 'Starlight Boulevard', z: -330, width: 10, minX: 402, maxX: 565 },
   ],
   // Flamingo Causeway carries Vermillion Boulevard over the bay to the Keys.
   bridge: {
@@ -135,7 +136,7 @@ export const ROAD_NETWORK = {
   roadY: 0.15,
 };
 
-// Avenue/boulevard crossings, with the causeway endpoints added as special nodes.
+// Avenue/boulevard crossings, clipped to explicit spans so no node floats on bay water.
 export const INTERSECTIONS = (() => {
   const list = [];
   for (const ave of ROAD_NETWORK.avenues) {
@@ -144,6 +145,13 @@ export const INTERSECTIONS = (() => {
       const keysRoad = ave.id === 'ave_keys' || blvd.id === 'blvd_keys';
       const mainlandOk = ave.id !== 'ave_keys' && blvd.id !== 'blvd_keys';
       if (keysRoad && !mainlandOk && !(ave.id === 'ave_keys' && blvd.id === 'blvd_keys')) continue;
+      // Span clip: the asphalt segment must actually exist at this crossing.
+      const aMinZ = ave.minZ ?? WORLD_BOUNDS.minZ;
+      const aMaxZ = ave.maxZ ?? 590;
+      const bMinX = blvd.minX ?? WORLD_BOUNDS.minX;
+      const bMaxX = blvd.maxX ?? WORLD_BOUNDS.maxX;
+      if (blvd.z < aMinZ || blvd.z > aMaxZ) continue;
+      if (ave.x < bMinX || ave.x > bMaxX) continue;
       list.push({ x: ave.x, z: blvd.z, avenueId: ave.id, boulevardId: blvd.z !== undefined ? blvd.id : blvd.id });
     }
   }
@@ -156,20 +164,47 @@ function nearestRoadPoint(x, z) {
   let best = null;
   let bestD = Infinity;
   for (const ave of ROAD_NETWORK.avenues) {
+    if (z < (ave.minZ ?? -640) || z > (ave.maxZ ?? 590)) continue;
     const d = Math.abs(x - ave.x);
-    if (d < bestD) {
-      bestD = d;
-      best = { x: ave.x, z, roadId: ave.id };
-    }
+    if (d < bestD) { bestD = d; best = { x: ave.x, z, roadId: ave.id }; }
+  }
+  for (const blvd of ROAD_NETWORK.boulevards) {
+    if (x < (blvd.minX ?? -640) || x > (blvd.maxX ?? 640)) continue;
+    const d = Math.abs(z - blvd.z);
+    if (d < bestD) { bestD = d; best = { x, z: blvd.z, roadId: blvd.id }; }
+  }
+  return best;
+}
+
+// Closest named street: nearest span-clipped avenue/boulevard, or the causeway.
+export function streetNameAt(x, z) {
+  const b = ROAD_NETWORK.bridge;
+  const abx = b.to.x - b.from.x;
+  const abz = b.to.z - b.from.z;
+  const t = Math.max(0, Math.min(1, ((x - b.from.x) * abx + (z - b.from.z) * abz) / (abx * abx + abz * abz)));
+  let name = b.name;
+  let bd = Math.hypot(x - (b.from.x + abx * t), z - (b.from.z + abz * t));
+  for (const ave of ROAD_NETWORK.avenues) {
+    if (z < (ave.minZ ?? -640) - 12 || z > (ave.maxZ ?? 590) + 12) continue;
+    const d = Math.abs(x - ave.x);
+    if (d < bd && d <= ave.width / 2 + 10) { bd = d; name = ave.name; }
+  }
+  for (const blvd of ROAD_NETWORK.boulevards) {
+    if (x < (blvd.minX ?? -640) - 12 || x > (blvd.maxX ?? 640) + 12) continue;
+    const d = Math.abs(z - blvd.z);
+    if (d < bd && d <= blvd.width / 2 + 10) { bd = d; name = blvd.name; }
+  }
+  if (bd <= 40) return name;
+  let fd = bd;
+  for (const ave of ROAD_NETWORK.avenues) {
+    const d = Math.abs(x - ave.x);
+    if (d < fd) { fd = d; name = ave.name; }
   }
   for (const blvd of ROAD_NETWORK.boulevards) {
     const d = Math.abs(z - blvd.z);
-    if (d < bestD) {
-      bestD = d;
-      best = { x, z: blvd.z, roadId: blvd.id };
-    }
+    if (d < fd) { fd = d; name = blvd.name; }
   }
-  return best;
+  return name;
 }
 
 // Simple L-shaped GPS route: snap to roads, drive along X then Z (or use bridge).
@@ -185,7 +220,7 @@ export function getWaypointRoute(from, to) {
     points.push({ x: entry.x, z: entry.z });
     points.push({ x: exit.x, z: exit.z });
   } else {
-    const snapped = nearestRoadPoint(from.x, from.z);
+    const snapped = nearestRoadPoint(from.x, from.z) || { x: from.x, z: from.z };
     points.push({ x: snapped.x, z: snapped.z });
     points.push({ x: snapped.x, z: to.z });
   }

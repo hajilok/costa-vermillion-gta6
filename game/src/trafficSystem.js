@@ -4,14 +4,6 @@ import * as THREE from 'three';
 import { LANDMARKS, ROAD_NETWORK, VEHICLE_IDS, VEHICLE_SPECS, WORLD_BOUNDS, isWater } from './cityConfig.js';
 import { VehiclePhysicsController, createVehicleMesh } from './vehicleSystem.js';
 
-const TRAFFIC_SPECS = ['veloce_gt', 'brisa_cabrio', 'dune_titan', 'sol_moto', 'boveda_armored'];
-
-function randomSpec(rng) {
-  return TRAFFIC_SPECS[Math.floor(rng() * TRAFFIC_SPECS.length)];
-}
-
-// ~28 AI vehicles on avenues/boulevards/causeway + parked boats + hero cars.
-// Lane-following, intersection turns, spacing checks, hijack hand-off to the player.
 export class CityTrafficManager {
   constructor(scene, rng, colliders = [], movingCount = 28) {
     this.scene = scene;
@@ -27,32 +19,82 @@ export class CityTrafficManager {
     this.spawnHeroCars();
   }
 
+  roadById(kind, id) {
+    const list = kind === 'avenue' ? ROAD_NETWORK.avenues : ROAD_NETWORK.boulevards;
+    return list.find((r) => r.id === id) || null;
+  }
+
+  clampToRoad(x, z) {
+    // Pull a point back inside the nearest span-clipped, dry road segment.
+    let best = null;
+    let bestD = Infinity;
+    for (const ave of ROAD_NETWORK.avenues) {
+      const zMin = ave.minZ ?? WORLD_BOUNDS.minZ;
+      const zMax = ave.maxZ ?? 590;
+      const cz = Math.max(zMin, Math.min(zMax, z));
+      const d = Math.hypot(x - ave.x, z - cz);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: ave.x, z: cz };
+      }
+    }
+    for (const blvd of ROAD_NETWORK.boulevards) {
+      const xMin = blvd.minX ?? WORLD_BOUNDS.minX;
+      const xMax = blvd.maxX ?? WORLD_BOUNDS.maxX;
+      const cx = Math.max(xMin, Math.min(xMax, x));
+      const d = Math.hypot(x - cx, z - blvd.z);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: cx, z: blvd.z };
+      }
+    }
+    return best || { x, z };
+  }
+
   pickLanePoint() {
     const r = this.rng;
-    if (r() < 0.42) {
-      const ave = ROAD_NETWORK.avenues[Math.floor(r() * ROAD_NETWORK.avenues.length)];
+    // Land traffic only: sample span-clipped dry asphalt, never bay/ocean water.
+    for (let tries = 0; tries < 16; tries += 1) {
+      if (r() < 0.42) {
+        const ave = ROAD_NETWORK.avenues[Math.floor(r() * ROAD_NETWORK.avenues.length)];
+        const dir = r() < 0.5 ? 1 : -1;
+        const zMin = ave.minZ ?? WORLD_BOUNDS.minZ;
+        const zMax = ave.maxZ ?? 590;
+        const z = zMin + 8 + r() * Math.max(1, zMax - zMin - 16);
+        const x = ave.x + dir * ROAD_NETWORK.laneOffset;
+        if (isWater(x, z)) continue;
+        return {
+          x, z,
+          heading: dir > 0 ? Math.PI : 0,
+          road: { kind: 'avenue', id: ave.id },
+          dir,
+        };
+      }
+      const blvd = ROAD_NETWORK.boulevards[Math.floor(r() * ROAD_NETWORK.boulevards.length)];
       const dir = r() < 0.5 ? 1 : -1;
+      const xMin = blvd.minX ?? WORLD_BOUNDS.minX;
+      const xMax = blvd.maxX ?? WORLD_BOUNDS.maxX;
+      const x = xMin + 8 + r() * Math.max(1, xMax - xMin - 16);
+      const z = blvd.z + dir * ROAD_NETWORK.laneOffset;
+      if (isWater(x, z)) continue;
       return {
-        x: ave.x + dir * ROAD_NETWORK.laneOffset,
-        z: WORLD_BOUNDS.minZ + 40 + r() * 1100,
-        heading: dir > 0 ? Math.PI : 0,
-        road: { kind: 'avenue', id: ave.id },
+        x, z,
+        heading: dir > 0 ? -Math.PI / 2 : Math.PI / 2,
+        road: { kind: 'boulevard', id: blvd.id },
         dir,
       };
     }
-    const blvd = ROAD_NETWORK.boulevards[Math.floor(r() * ROAD_NETWORK.boulevards.length)];
-    const dir = r() < 0.5 ? 1 : -1;
     return {
-      x: WORLD_BOUNDS.minX + 40 + r() * 1100,
-      z: blvd.z + dir * ROAD_NETWORK.laneOffset,
-      heading: dir > 0 ? -Math.PI / 2 : Math.PI / 2,
-      road: { kind: 'boulevard', id: blvd.id },
-      dir,
+      x: ROAD_NETWORK.avenues[0].x + ROAD_NETWORK.laneOffset,
+      z: 0,
+      heading: 0,
+      road: { kind: 'avenue', id: 'ave_coral' },
+      dir: 1,
     };
   }
 
   spawnTrafficVehicle(anywhere = false, specId = null, at = null) {
-    const spec = specId ?? randomSpec(this.rng);
+    const spec = specId ?? TRAFFIC_SPECS[Math.floor(this.rng() * TRAFFIC_SPECS.length)];
     const mesh = createVehicleMesh(spec, undefined);
     const controller = new VehiclePhysicsController(mesh, spec, this.colliders);
     controller.ensureParticlePool(this.scene);
@@ -79,26 +121,41 @@ export class CityTrafficManager {
     return v;
   }
 
+  parkCar(spec, x, z, heading, color) {
+    // Showcase / hero parking: only on dry land.
+    if (isWater(x, z)) {
+      const safe = this.clampToRoad(x, z);
+      x = safe.x;
+      z = safe.z;
+    }
+    const mesh = createVehicleMesh(spec, color);
+    const controller = new VehiclePhysicsController(mesh, spec, this.colliders);
+    controller.ensureParticlePool(this.scene);
+    controller.reset(x, z, heading);
+    controller.speed = 0;
+    this.scene.add(mesh);
+    this.vehicles.push({ mesh, controller, specId: spec, parked: true, hijacked: false, aiLocked: false, ai: null });
+  }
+
   spawnParkedBoats() {
-    // Marina slips off the promenade piers + bay moorings.
+    // Marina slips off the promenade piers + bay moorings (wet by design).
     const slips = [
       { x: -600, z: -170 }, { x: -600, z: -110 }, { x: -600, z: 60 },
       { x: -600, z: 120 }, { x: -600, z: 280 }, { x: -600, z: 340 },
       { x: 215, z: 60 }, { x: 365, z: -80 },
     ];
     for (const s of slips) {
+      if (!isWater(s.x, s.z)) continue;
       const mesh = createVehicleMesh('marea_speedboat', undefined);
       const controller = new VehiclePhysicsController(mesh, 'marea_speedboat', this.colliders);
       controller.ensureParticlePool(this.scene);
-      const heading = this.rng() * Math.PI * 2;
-      controller.reset(s.x, s.z, heading);
+      controller.reset(s.x, s.z, this.rng() * Math.PI * 2);
       this.scene.add(mesh);
       this.vehicles.push({ mesh, controller, specId: 'marea_speedboat', parked: true, hijacked: false, aiLocked: false, ai: null });
     }
   }
 
   spawnHeroCars() {
-    // Parked hero cars near mission landmarks, ready to steal.
     const spots = [
       { spec: 'brisa_cabrio', near: 'hotel_mariposa', dx: 18, dz: 12 },
       { spec: 'veloce_gt', near: 'solar_club', dx: -16, dz: 10 },
@@ -110,13 +167,11 @@ export class CityTrafficManager {
     for (const s of spots) {
       const lm = LANDMARKS.find((l) => l.id === s.near);
       if (!lm) continue;
-      const mesh = createVehicleMesh(s.spec, undefined);
-      const controller = new VehiclePhysicsController(mesh, s.spec, this.colliders);
-      controller.ensureParticlePool(this.scene);
-      controller.reset(lm.pos.x + s.dx, lm.pos.z + s.dz, this.rng() * Math.PI * 2);
-      this.scene.add(mesh);
-      this.vehicles.push({ mesh, controller, specId: s.spec, parked: true, hijacked: false, aiLocked: false, ai: null });
+      this.parkCar(s.spec, lm.pos.x + s.dx, lm.pos.z + s.dz, this.rng() * Math.PI * 2, undefined);
     }
+    // Showroom pair staged beside the Coral Mod Garage landmark (-40, 60).
+    this.parkCar('brisa_cabrio', -40 + 16, 60 + 8, Math.PI / 2, 0x38e8ff);
+    this.parkCar('veloce_gt', -40 - 16, 60 - 8, -Math.PI / 2, 0xffc44d);
   }
 
   nearestStealable(pos, maxDist = 5.5) {
@@ -260,11 +315,11 @@ export class CityTrafficManager {
 
       // Lane-following: ease back to lane center, roll along heading.
       if (onAve) {
-        const ave = ROAD_NETWORK.avenues.find((a) => a.id === ai.road.id);
+        const ave = this.roadById('avenue', ai.road.id);
         if (ave) c.pos.x += (ave.x + ai.dir * ROAD_NETWORK.laneOffset - c.pos.x) * Math.min(1, dt * 2);
         c.heading += ((ai.dir > 0 ? Math.PI : 0) - c.heading) * Math.min(1, dt * 2);
       } else {
-        const blvd = ROAD_NETWORK.boulevards.find((x) => x.id === ai.road.id);
+        const blvd = this.roadById('boulevard', ai.road.id);
         if (blvd) c.pos.z += (blvd.z + ai.dir * ROAD_NETWORK.laneOffset - c.pos.z) * Math.min(1, dt * 2);
         c.heading += ((ai.dir > 0 ? -Math.PI / 2 : Math.PI / 2) - c.heading) * Math.min(1, dt * 2);
       }
@@ -274,12 +329,33 @@ export class CityTrafficManager {
         c.pos.addScaledVector(fwd, c.speed * dt);
       }
 
-      // Wrap around world edges so traffic never runs dry.
-      if (c.pos.x < WORLD_BOUNDS.minX - 20) c.pos.x = WORLD_BOUNDS.maxX + 15;
-      if (c.pos.x > WORLD_BOUNDS.maxX + 20) c.pos.x = WORLD_BOUNDS.minX - 15;
-      if (c.pos.z < WORLD_BOUNDS.minZ - 20) c.pos.z = WORLD_BOUNDS.maxZ + 15;
-      if (c.pos.z > WORLD_BOUNDS.maxZ + 20) c.pos.z = WORLD_BOUNDS.minZ - 15;
-      if (isWater(c.pos.x, c.pos.z)) {
+      // Stay on span-clipped dry asphalt: reverse/turn at bay/island endpoints.
+      const road = this.roadById(ai.road.kind, ai.road.id);
+      let outOfSpan = false;
+      if (road) {
+        if (onAve) {
+          const zMin = road.minZ ?? WORLD_BOUNDS.minZ;
+          const zMax = road.maxZ ?? 590;
+          if (c.pos.z < zMin + 4 || c.pos.z > zMax - 4) outOfSpan = true;
+        } else {
+          const xMin = road.minX ?? WORLD_BOUNDS.minX;
+          const xMax = road.maxX ?? WORLD_BOUNDS.maxX;
+          if (c.pos.x < xMin + 4 || c.pos.x > xMax - 4) outOfSpan = true;
+        }
+      }
+      if (outOfSpan || isWater(c.pos.x, c.pos.z)) {
+        // U-turn away from the water endpoint and nudge back on-span.
+        ai.dir = -ai.dir;
+        const safe = this.clampToRoad(c.pos.x, c.pos.z);
+        c.pos.x = safe.x + (this.rng() - 0.5) * 2;
+        c.pos.z = safe.z + (this.rng() - 0.5) * 2;
+        c.heading += Math.PI;
+        c.speed = Math.min(c.speed, 6);
+        ai.turnCooldown = 4 + this.rng() * 4;
+      }
+      // Wrap around outer world edges (clamped back to spans) so traffic never runs dry.
+      if (c.pos.x < WORLD_BOUNDS.minX - 20 || c.pos.x > WORLD_BOUNDS.maxX + 20
+        || c.pos.z < WORLD_BOUNDS.minZ - 20 || c.pos.z > WORLD_BOUNDS.maxZ + 20) {
         const fix = this.pickLanePoint();
         c.reset(fix.x, fix.z, fix.heading);
       }
@@ -299,5 +375,7 @@ export class CityTrafficManager {
     }
   }
 }
+
+const TRAFFIC_SPECS = ['veloce_gt', 'brisa_cabrio', 'dune_titan', 'sol_moto', 'boveda_armored'];
 
 export { TRAFFIC_SPECS, VEHICLE_IDS };
