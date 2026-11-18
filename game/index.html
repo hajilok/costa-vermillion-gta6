@@ -16,147 +16,79 @@
 </head>
 <body>
 <canvas id="game-canvas" aria-label="Costa Vermillion Sunset Syndicate 3D open world"></canvas>
-
-<div id="hud-root" aria-hidden="false">
-  <div id="mission-banner" role="status" aria-live="polite">
-    <div id="mission-chapter">Chapter 1 &mdash; Salt &amp; Neon</div>
-    <div id="mission-title">Welcome to Puerto Vermillion</div>
-    <div id="mission-objective">Meet Mateo Cruz at Hotel Mariposa</div>
-    <div id="mission-dist">142 m</div>
-    <div id="mission-progress-shell" aria-label="Chapter progress"><div id="mission-progress-fill"></div></div>
+<div id="hud-root">
+  <div id="mission-banner">
+    <div id="mission-title">GOLDEN HOUR ARRIVAL</div>
+    <div id="mission-stage">STAGE 1 / 3</div>
+    <div id="mission-progress"><div id="mission-progress-fill"></div></div>
   </div>
-
-  <div id="pursuit-panel" aria-label="PVPD pursuit units">
-    <div id="pursuit-header">PVPD RESPONSE</div>
+  <div id="pursuit-panel">
+    <div id="pursuit-title">PVPD PURSUIT</div>
     <ul id="pursuit-list"></ul>
   </div>
-
-  <div id="status-cluster" aria-label="Player status">
-    <div id="clock-badge">FRI 18:42</div>
-    <div id="cash-value">$1,250</div>
-    <div id="wanted-block">
-      <div id="wanted-stars" aria-label="Wanted level">
-        <span>&#9733;</span><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span>
-      </div>
-      <div id="wanted-label">PVPD: CLEAR</div>
+  <div id="status-cluster">
+    <span id="clock-badge">FRI 18:42</span>
+    <span id="cash-value">$400</span>
+    <span id="wanted-stars"><span></span><span></span><span></span><span></span><span></span></span>
+    <span id="wanted-label">CLEAN</span>
+    <span id="respect-value">NOBODY</span>
+    <div id="weapon-strip">
+      <button data-slot="0" aria-label="Viper pistol"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 10h13l4 2v4h-3l-1-2H8l-1 3H4l1-3H3z" fill="#fff"/></svg></button>
+      <button data-slot="1" aria-label="Coral SMG"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M2 9h16l3 3v5h-4l-1-2h-6v3H7v-3H4z" fill="#fff"/></svg></button>
+      <button data-slot="2" aria-label="Breacher shotgun"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M2 12h15l4-2v7h-4l-1-2H9l-1 2H5z" fill="#fff"/></svg></button>
+      <button data-slot="3" aria-label="Pulse grenade"><svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="13" r="6" fill="#fff"/><rect x="10" y="3" width="4" height="4" fill="#fff"/></svg></button>
     </div>
-    <div id="respect-value">RESPECT 10</div>
-    <div id="weapon-block">
-      <div id="weapon-strip" aria-label="Weapon slots">
-        <div class="wslot" data-slot="1">
-          <svg class="wicon" viewBox="0 0 48 20" aria-hidden="true"><rect x="2" y="8" width="26" height="6" rx="2" fill="#fff"/><rect x="28" y="9.5" width="14" height="3" fill="#fff"/><rect x="8" y="13" width="5" height="6" fill="#fff"/></svg>
-          <span class="wname">Viper Pistol</span>
-          <span class="wammo" data-ammo="1">12 / 48</span>
-          <span class="wkey">1</span>
-        </div>
-        <div class="wslot" data-slot="2">
-          <svg class="wicon" viewBox="0 0 48 20" aria-hidden="true"><rect x="2" y="7" width="30" height="7" rx="2" fill="#fff"/><rect x="32" y="9" width="12" height="3" fill="#fff"/><rect x="10" y="13" width="5" height="6" fill="#fff"/><rect x="20" y="4" width="8" height="3" fill="#fff"/></svg>
-          <span class="wname">Coral SMG</span>
-          <span class="wammo" data-ammo="2">32 / 128</span>
-          <span class="wkey">2</span>
-        </div>
-        <div class="wslot" data-slot="3">
-          <svg class="wicon" viewBox="0 0 48 20" aria-hidden="true"><rect x="2" y="8" width="24" height="7" rx="3" fill="#fff"/><rect x="26" y="9.5" width="16" height="4" fill="#fff"/><rect x="6" y="13" width="7" height="6" fill="#fff"/></svg>
-          <span class="wname">Breacher Shotgun</span>
-          <span class="wammo" data-ammo="3">6 / 24</span>
-          <span class="wkey">3</span>
-        </div>
-        <div class="wslot" data-slot="4">
-          <svg class="wicon" viewBox="0 0 48 20" aria-hidden="true"><circle cx="14" cy="10" r="7" fill="#fff"/><rect x="21" y="8" width="12" height="4" fill="#fff"/><rect x="33" y="4" width="3" height="8" fill="#fff"/></svg>
-          <span class="wname">Pulse Grenade</span>
-          <span class="wammo" data-ammo="4">1 / 3</span>
-          <span class="wkey">4</span>
-        </div>
-      </div>
-      <span id="weapon-name">Viper Pistol</span>
-      <span id="weapon-ammo">12 / 48</span>
-    </div>
-    <div id="radio-station">&#9834; RADIO SOL 88.4</div>
+    <div id="weapon-name">VIPER PISTOL</div>
+    <div id="weapon-ammo">12 / 48</div>
+    <div id="radio-station">RADIO SOL 88.4</div>
   </div>
-
-  <div id="radar-cluster" aria-label="Radar">
+  <div id="radar-cluster">
     <canvas id="minimap-canvas" width="216" height="216"></canvas>
-    <div id="district-name">Coral Promenade</div>
-    <div id="street-name">Coral Avenue</div>
-    <div class="bar-row"><span class="bar-tag">HEALTH</span><div class="bar-shell" aria-label="Health"><div id="health-bar-fill"></div></div><span id="health-num">100</span></div>
-    <div class="bar-row"><span class="bar-tag">ARMOR</span><div class="bar-shell" aria-label="Armor"><div id="armor-bar-fill"></div></div><span id="armor-num">50</span></div>
+    <div id="district-name">Downtown Vermillion</div>
+    <div id="street-name">Ave Central</div>
+    <div class="bar-row"><span>HEALTH</span><div class="bar"><div id="health-fill"></div></div><span id="health-num">100</span></div>
+    <div class="bar-row"><span>ARMOR</span><div class="bar"><div id="armor-fill"></div></div><span id="armor-num">0</span></div>
   </div>
-
-  <div id="speedo-cluster" aria-label="Vehicle speed">
-    <div id="speed-num">0</div>
-    <div id="speed-gear">P</div>
-    <div id="vehicle-label">ON FOOT</div>
-    <div class="bar-shell nitro-shell" aria-label="Nitro"><div id="nitro-bar-fill"></div></div>
+  <div id="speedo-cluster">
+    <div id="speed-value">0</div>
+    <div id="speed-unit">MPH</div>
+    <div id="vehicle-name">ON FOOT</div>
   </div>
-
-  <div id="aim-reticle" aria-hidden="true"><span></span></div>
-
-  <div id="dialogue-box" aria-live="polite">
+  <div id="aim-reticle" aria-hidden="true"></div>
+  <div id="dialogue-box">
     <div id="dialogue-avatar" aria-hidden="true"></div>
-    <div id="dialogue-text">
-      <div id="dialogue-speaker">ELENA VEGA</div>
-      <div id="dialogue-line">The whole coast is ours if we take it block by block.</div>
-    </div>
+    <div><div id="dialogue-speaker">ELENA VEGA</div><div id="dialogue-line">Welcome to Puerto Vermillion.</div></div>
   </div>
-  <div id="context-hint">Press E to talk &middot; F to enter vehicle</div>
+  <div id="context-hint">WASD drive &middot; E enter &middot; M map &middot; C swap crew</div>
 </div>
-
-<div id="menu-overlay" class="visible" role="dialog" aria-modal="true" aria-label="Game menu">
+<div id="menu-overlay">
   <div class="menu-card">
-    <h1>COSTA VERMILLION</h1>
-    <p class="subtitle">SUNSET SYNDICATE &mdash; Puerto Vermillion</p>
-    <div class="menu-buttons">
-      <button id="btn-resume" type="button">Resume</button>
-      <button id="btn-newgame" type="button">New Game</button>
+    <h1>COSTA VERMILLION — SUNSET SYNDICATE</h1>
+    <div id="menu-actions">
+      <button id="resume-btn">Resume</button>
+      <button id="newgame-btn">New Game</button>
     </div>
-    <section class="menu-main">
-      <div class="menu-mapcol" aria-label="City map">
-        <h2>City Map &mdash; Puerto Vermillion</h2>
-        <canvas id="worldmap-canvas" width="420" height="300"></canvas>
-        <section aria-label="Save slots">
-          <h2>Save Slots (localStorage)</h2>
-          <div class="save-row">
-            <button type="button" data-save="1">Save 1</button>
-            <button type="button" data-load="1">Load 1</button>
-            <button type="button" data-save="2">Save 2</button>
-            <button type="button" data-load="2">Load 2</button>
-            <button type="button" data-save="3">Save 3</button>
-            <button type="button" data-load="3">Load 3</button>
-          </div>
-          <div id="save-badge">Slot 1: Ch.4 &middot; $18,450 &middot; Saved</div>
-        </section>
-      </div>
-      <div class="menu-sidecol">
-        <section aria-label="Story chapters">
-          <h2>Story Chapters &mdash; The Sunset Ledger</h2>
-          <ol id="chapter-list">
-            <li>Salt &amp; Neon</li>
-            <li>The Mariposa Deal</li>
-            <li>Engines of Bahia</li>
-            <li>Starlight Debts</li>
-            <li>Vermillion Tower Run</li>
-            <li>The Sunset Ledger</li>
-          </ol>
-        </section>
-        <section aria-label="Controls">
-          <h2>Controls &mdash; Keyboard + Mouse</h2>
-          <ul id="controls-card">
-            <li>WASD / Arrows &mdash; move / drive</li>
-            <li>Mouse &mdash; look / aim</li>
-            <li>E &mdash; talk / interact</li>
-            <li>F &mdash; enter / exit vehicle</li>
-            <li>R &mdash; reload &middot; T &mdash; radio</li>
-            <li>1&ndash;4 &mdash; weapons, G &mdash; grenade</li>
-            <li>Shift &mdash; sprint / nitro</li>
-            <li>Space &mdash; handbrake / drift</li>
-            <li>M &mdash; city map, Esc &mdash; pause</li>
-          </ul>
-        </section>
-      </div>
-    </section>
+    <canvas id="worldmap-canvas" width="560" height="380"></canvas>
+    <div id="save-row">
+      <button data-save="1">SAVE 1</button>
+      <button data-save="2">SAVE 2</button>
+      <button data-save="3">SAVE 3</button>
+      <button data-load="1">LOAD 1</button>
+      <button data-load="2">LOAD 2</button>
+      <button data-load="3">LOAD 3</button>
+      <span id="save-badge">NO SAVE YET</span>
+    </div>
+    <ol id="chapter-list">
+      <li>✓ Golden Hour Arrival</li>
+      <li>The Coral Mod Run</li>
+      <li>The Vermillion Bank Job</li>
+      <li>Bahia Breakout</li>
+      <li>The Causeway Run</li>
+      <li>The Sunset Ledger</li>
+    </ol>
+    <div id="controls-card">WASD drive &middot; Mouse aim &middot; 1-4 weapons &middot; E enter &middot; M map &middot; C swap &middot; P pause</div>
   </div>
 </div>
-
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

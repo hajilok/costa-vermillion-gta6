@@ -1,511 +1,289 @@
-// Costa Vermillion: Sunset Syndicate — Elena Vega on-foot rig + pedestrian crowds.
-// 100% original content. Imports only 'three' and './cityConfig.js'.
-import * as THREE from 'three';
-import { ROAD_NETWORK, WORLD_BOUNDS, isWater } from './cityConfig.js';
+// Elena and Mateo on foot plus sidewalk crowds. Every ped spawn and step is
+// clamped to road spans and rejected on water so crowds never touch the bay.
+
+import * as THREE from '../vendor/three.module.min.js';
+import { ROAD_NETWORK, isWater } from './cityConfig.js';
+
+export function createCharacterRig(options) {
+  const opts = options || {};
+  const skin = opts.skin || 0xd9a077;
+  const jacket = opts.jacket || 0xff5f6d;
+  const pants = opts.pants || 0x27324a;
+  const hairColor = opts.hair || 0x2a1a12;
+
+  const rig = new THREE.Group();
+  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 });
+  const jacketMat = new THREE.MeshStandardMaterial({ color: jacket, roughness: 0.6 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: pants, roughness: 0.75 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.55 });
+
+  const hips = new THREE.Group();
+  hips.position.y = 0.95;
+  rig.add(hips);
+
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.28, 0.26), pantsMat);
+  pelvis.position.y = 0;
+  pelvis.castShadow = true;
+  hips.add(pelvis);
+
+  function makeLeg(side) {
+    const leg = new THREE.Group();
+    leg.position.set(side * 0.13, -0.1, 0);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.42, 0.18), pantsMat);
+    thigh.position.y = -0.22;
+    thigh.castShadow = true;
+    leg.add(thigh);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.12, 0.34), new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 }));
+    shoe.position.set(0, -0.48, -0.05);
+    leg.add(shoe);
+    hips.add(leg);
+    return leg;
+  }
+
+  const legL = makeLeg(-1);
+  const legR = makeLeg(1);
+
+  const torso = new THREE.Group();
+  torso.position.y = 0.18;
+  hips.add(torso);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.55, 0.28), jacketMat);
+  chest.position.y = 0.28;
+  chest.castShadow = true;
+  torso.add(chest);
+  const collar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.32), jacketMat);
+  collar.position.y = 0.58;
+  torso.add(collar);
+
+  const head = new THREE.Group();
+  head.position.y = 0.66;
+  torso.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 12), skinMat);
+  skull.castShadow = true;
+  head.add(skull);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 12), hairMat);
+  hair.scale.set(1, 0.85, 1);
+  hair.position.set(0, 0.07, 0.03);
+  head.add(hair);
+  if (opts.ponytail !== false) {
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.42, 8), hairMat);
+    tail.position.set(0, -0.02, 0.22);
+    tail.rotation.x = 0.5;
+    head.add(tail);
+  }
+
+  function makeArm(side) {
+    const arm = new THREE.Group();
+    arm.position.set(side * 0.3, 0.48, 0);
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.36, 0.15), jacketMat);
+    upper.position.y = -0.18;
+    upper.castShadow = true;
+    arm.add(upper);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), skinMat);
+    hand.position.y = -0.42;
+    arm.add(hand);
+    torso.add(arm);
+    return arm;
+  }
+
+  const armL = makeArm(-1);
+  const armR = makeArm(1);
+
+  // Compact handheld gun parented directly to the right hand joint at x=0 so
+  // the SMG grip stays glued to the palm while aiming.
+  const gunMesh = new THREE.Group();
+  const gunBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.09, 0.14, 0.55),
+    new THREE.MeshStandardMaterial({ color: 0x23262e, metalness: 0.75, roughness: 0.35 })
+  );
+  gunMesh.add(gunBody);
+  const grip = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.2, 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x5a3d2b, roughness: 0.7 })
+  );
+  grip.position.set(0, -0.14, 0.12);
+  grip.rotation.x = 0.3;
+  gunMesh.add(grip);
+  const muzzleTip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.035, 0.12, 8),
+    new THREE.MeshStandardMaterial({ color: 0x101216, metalness: 0.8, roughness: 0.3 })
+  );
+  muzzleTip.rotation.x = Math.PI / 2;
+  muzzleTip.position.set(0, 0.02, -0.32);
+  gunMesh.add(muzzleTip);
+  gunMesh.position.set(0, -0.42, -0.12);
+  gunMesh.visible = false;
+  armR.add(gunMesh);
+
+  rig.userData = {
+    hips,
+    torso,
+    head,
+    armL,
+    armR,
+    legL,
+    legR,
+    gunMesh,
+    walkPhase: Math.random() * Math.PI * 2,
+  };
+  return rig;
+}
+
+function clampToRoadSpan(x, z) {
+  let cx = x;
+  let cz = z;
+  let best = null;
+  let bestDist = Infinity;
+  for (const a of ROAD_NETWORK.avenues) {
+    if (cz < a.minZ || cz > a.maxZ) continue;
+    const d = Math.abs(cx - a.x);
+    if (d < bestDist) {
+      bestDist = d;
+      best = { x: a.x + (cx > a.x ? 9 : -9), z: cz };
+    }
+  }
+  for (const b of ROAD_NETWORK.boulevards) {
+    if (cx < b.minX || cx > b.maxX) continue;
+    const d = Math.abs(cz - b.z);
+    if (d < bestDist) {
+      bestDist = d;
+      best = { x: cx, z: b.z + (cz > b.z ? 9 : -9) };
+    }
+  }
+  if (best) {
+    cx = best.x;
+    cz = best.z;
+  }
+  return { x: cx, z: cz };
+}
+
+function drySidewalk(rand) {
+  for (let i = 0; i < 24; i++) {
+    const avenue = ROAD_NETWORK.avenues[Math.floor(rand() * ROAD_NETWORK.avenues.length)];
+    const z = avenue.minZ + rand() * (avenue.maxZ - avenue.minZ);
+    const x = avenue.x + (rand() < 0.5 ? -9 : 9);
+    if (!isWater(x, z)) return { x, z };
+    const boulevard = ROAD_NETWORK.boulevards[Math.floor(rand() * ROAD_NETWORK.boulevards.length)];
+    const bx = boulevard.minX + rand() * (boulevard.maxX - boulevard.minX);
+    const bz = boulevard.z + (rand() < 0.5 ? -9 : 9);
+    if (!isWater(bx, bz)) return { x: bx, z: bz };
+  }
+  return { x: -260, z: -211 };
+}
 
 export class PlayerCharacterController {
-  constructor(scene, rig, opts = {}) {
+  constructor(scene, options) {
     this.scene = scene;
-    this.mesh = rig;
-    this.pos = rig.position.clone();
+    this.rig = createCharacterRig(options || { jacket: 0xff5f6d });
+    this.x = options?.x ?? -415;
+    this.z = options?.z ?? 120;
     this.heading = 0;
     this.speed = 0;
-    this.sprinting = false;
     this.aiming = false;
-    this.health = 100;
-    this.armor = opts.armor ?? 50;
-    this.dead = false;
-    this.inVehicle = null; // VehiclePhysicsController when driving
-    this.walkPhase = 0;
-    this.muzzleTimer = 0;
-    this.enterCooldown = 0;
-    scene.add(rig);
+    if (scene) scene.add(this.rig);
+    this.syncMesh(0);
   }
 
-  get onFoot() {
-    return !this.inVehicle;
-  }
-
-  teleport(x, z, heading = 0) {
-    this.pos.set(x, 0, z);
-    this.heading = heading;
-    this.speed = 0;
-    this.mesh.position.copy(this.pos);
-    this.mesh.rotation.set(0, heading, 0);
-  }
-
-  damage(amount) {
-    if (this.dead) return;
-    let rest = amount;
-    if (this.armor > 0) {
-      const soak = Math.min(this.armor, rest * 0.6);
-      this.armor -= soak;
-      rest -= soak;
-    }
-    this.health -= rest;
-    if (this.health <= 0) {
-      this.health = 0;
-      this.dead = true;
+  syncMesh(t) {
+    this.rig.position.set(this.x, 0, this.z);
+    this.rig.rotation.y = this.heading;
+    const u = this.rig.userData;
+    const swing = Math.min(1, Math.abs(this.speed) / 4) * Math.sin((t || 0) * 9 + u.walkPhase);
+    u.legL.rotation.x = swing * 0.7;
+    u.legR.rotation.x = -swing * 0.7;
+    u.armL.rotation.x = -swing * 0.5;
+    if (this.aiming) {
+      u.armR.rotation.x = -Math.PI / 2 + 0.08;
+      u.gunMesh.visible = true;
+    } else {
+      u.armR.rotation.x = swing * 0.5;
+      u.gunMesh.visible = false;
     }
   }
 
-  heal(amount) {
-    this.health = Math.min(100, this.health + amount);
+  step(input, dt, t) {
+    const run = input.sprint ? 7.2 : 4.4;
+    const tx = input.moveX * run;
+    const tz = input.moveZ * run;
+    this.speed += (Math.hypot(tx, tz) - this.speed) * Math.min(1, dt * 8);
+    if (Math.hypot(tx, tz) > 0.2) this.heading = Math.atan2(tx, tz);
+    const nx = this.x + (tx * dt);
+    const nz = this.z + (tz * dt);
+    if (!isWater(nx, nz)) {
+      this.x = nx;
+      this.z = nz;
+    }
+    this.aiming = !!input.aim;
+    this.syncMesh(t);
+    return this;
   }
 
   fireWeapon() {
-    if (!this.onFoot || this.dead) return null;
-    triggerMuzzleFlash(this.mesh);
-    this.muzzleTimer = 0.06;
-    // Muzzle starts ahead and to the right of Elena — never inside her torso.
-    const fwd = new THREE.Vector3(-Math.sin(this.heading), 0, -Math.cos(this.heading));
-    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-    const from = this.pos.clone().addScaledVector(fwd, 0.85).addScaledVector(right, 0.28);
-    from.y = 1.38;
-    const dir = new THREE.Vector3(-Math.sin(this.heading), 0, -Math.cos(this.heading));
-    return { from, dir };
-  }
-
-  // Smooth F-key carjack: hides the rig, attaches to any traffic/parked vehicle.
-  tryEnterVehicle(vehicle) {
-    if (!this.onFoot || this.enterCooldown > 0 || !vehicle || vehicle.aiLocked) return false;
-    this.inVehicle = vehicle.controller || vehicle;
-    this.enterCooldown = 0.6;
-    this.mesh.visible = false;
-    return true;
-  }
-
-  exitVehicle() {
-    if (this.onFoot || this.enterCooldown > 0) return false;
-    const ctrl = this.inVehicle;
-    const side = new THREE.Vector3(-Math.cos(ctrl.heading), 0, Math.sin(ctrl.heading));
-    const out = ctrl.pos.clone().addScaledVector(side, 2.2);
-    if (isWater(out.x, out.z) && !ctrl.isBoat) out.addScaledVector(side, 2.4);
-    this.inVehicle = null;
-    this.enterCooldown = 0.6;
-    this.mesh.visible = true;
-    this.teleport(out.x, out.z, ctrl.heading);
-    return true;
-  }
-
-  // input: { moveX, moveZ (camera-space), sprint, aim }
-  update(dt, input = {}) {
-    this.enterCooldown = Math.max(0, this.enterCooldown - dt);
-    const j = this.mesh.userData.joints;
-    if (this.inVehicle) {
-      this.pos.copy(this.inVehicle.pos);
-      this.heading = this.inVehicle.heading;
-      this.mesh.position.copy(this.pos);
-      this.mesh.rotation.set(0, this.heading, 0);
-      return { speed: Math.abs(this.inVehicle.speed), driving: true };
-    }
-    if (this.dead) {
-      this.mesh.rotation.x += (Math.PI / 2 - this.mesh.rotation.x) * Math.min(1, dt * 4);
-      return { speed: 0, driving: false };
-    }
-    const mx = input.moveX ?? 0;
-    const mz = input.moveZ ?? 0;
-    const mag = Math.min(1, Math.hypot(mx, mz));
-    this.sprinting = !!input.sprint && mag > 0.1;
-    this.aiming = !!input.aim;
-    const top = this.sprinting ? 7.4 : 4.4;
-    this.speed += (top * mag - this.speed) * Math.min(1, dt * 10);
-    if (mag > 0.05) {
-      this.heading = Math.atan2(-mx, -mz);
-      this.pos.x += mx * this.speed * dt;
-      this.pos.z += mz * this.speed * dt;
-    }
-    this.pos.x = Math.max(WORLD_BOUNDS.minX, Math.min(WORLD_BOUNDS.maxX, this.pos.x));
-    this.pos.z = Math.max(WORLD_BOUNDS.minZ, Math.min(WORLD_BOUNDS.maxZ, this.pos.z));
-    if (isWater(this.pos.x, this.pos.z)) {
-      this.speed *= 1 - Math.min(1, dt * 2);
-    }
-    this.pos.y = 0;
-    this.mesh.position.copy(this.pos);
-    this.mesh.rotation.set(0, this.heading, 0);
-    // Show the handheld gun only while armed/aiming.
-    const gun = this.mesh.userData.gunMesh;
-    if (gun) gun.visible = this.aiming || this.muzzleTimer > 0;
-
-    this.walkPhase += dt * (3 + this.speed * 1.8);
-    const swing = Math.min(0.8, this.speed * 0.12) * Math.sin(this.walkPhase * 3);
-    j.legL.hip.rotation.x = swing;
-    j.legR.hip.rotation.x = -swing;
-    j.legL.knee.rotation.x = Math.max(0, -swing) * 0.8;
-    j.legR.knee.rotation.x = Math.max(0, swing) * 0.8;
-    if (this.aiming) {
-      j.armR.shoulder.rotation.x = -Math.PI / 2 + 0.12;
-      j.armR.elbow.rotation.x = 0;
-      j.armL.shoulder.rotation.x = -Math.PI / 2 + 0.3;
-      j.armL.shoulder.rotation.y = 0.5;
-      j.armL.elbow.rotation.x = -0.5;
-      j.armL.shoulder.rotation.z = 0;
-      j.armR.shoulder.rotation.z = 0;
-    } else {
-      j.armR.shoulder.rotation.x = -swing * 0.7;
-      j.armL.shoulder.rotation.x = swing * 0.7;
-      j.armL.shoulder.rotation.y = 0;
-      j.armR.shoulder.rotation.z = 0.12;
-      j.armL.shoulder.rotation.z = -0.12;
-      j.armR.elbow.rotation.x = -0.25;
-      j.armL.elbow.rotation.x = -0.25;
-    }
-    if (this.muzzleTimer > 0) {
-      this.muzzleTimer -= dt;
-      j.muzzleFlash.material.opacity = 0.95;
-      j.muzzleFlash.rotation.z = Math.random() * Math.PI;
-    } else {
-      j.muzzleFlash.material.opacity = 0;
-    }
-    return { speed: this.speed, driving: false };
+    const fx = Math.sin(this.heading);
+    const fz = Math.cos(this.heading);
+    const rx = Math.cos(this.heading);
+    const rz = -Math.sin(this.heading);
+    const origin = new THREE.Vector3(
+      this.x + fx * 0.85 + rx * 0.25,
+      1.38,
+      this.z + fz * 0.85 + rz * 0.25
+    );
+    const dir = new THREE.Vector3(fx, 0, fz);
+    this.rig.userData.gunMesh.visible = true;
+    return { origin, dir };
   }
 }
 
 export class PedestrianCrowdManager {
-  constructor(scene, rng, count = 48) {
+  constructor(scene, rand) {
     this.scene = scene;
-    this.rng = rng;
+    this.rand = rand || Math.random;
     this.peds = [];
-    this.panicEvents = [];
-    for (let i = 0; i < count; i += 1) {
+  }
+
+  spawn(count) {
+    for (let i = 0; i < count; i++) {
+      const palettes = [0x4dd6c6, 0xffd94d, 0x7fb6d9, 0xff9e7d, 0xc9f2d8];
       const rig = createCharacterRig({
-        skin: SKIN[Math.floor(rng() * SKIN.length)],
-        top: TOPS[Math.floor(rng() * TOPS.length)],
-        bottom: BOTTOMS[Math.floor(rng() * BOTTOMS.length)],
-        hair: [0x2a1a12, 0x6b4a1f, 0xd8b25a, 0x111111, 0xff7a3c][Math.floor(rng() * 5)],
-        female: rng() < 0.5,
-        hat: rng() < 0.3,
+        jacket: palettes[Math.floor(this.rand() * palettes.length)],
+        ponytail: this.rand() < 0.5,
+        hair: [0x2a1a12, 0x6b4a2a, 0x111111, 0xd9c08a][Math.floor(this.rand() * 4)],
       });
-      scene.add(rig);
+      const spot = drySidewalk(this.rand);
+      const clamped = clampToRoadSpan(spot.x, spot.z);
       const ped = {
-        rig,
-        pos: new THREE.Vector3(),
-        heading: rng() * Math.PI * 2,
-        speed: 0.9 + rng() * 1.1,
-        state: 'walk', // walk | flee
-        phase: rng() * 10,
-        target: new THREE.Vector3(),
-        fleeTimer: 0,
+        mesh: rig,
+        x: isWater(clamped.x, clamped.z) ? -260 : clamped.x,
+        z: isWater(clamped.x, clamped.z) ? -211 : clamped.z,
+        heading: this.rand() * Math.PI * 2,
+        speed: 0.8 + this.rand() * 1.2,
+        t: this.rand() * 10,
       };
-      this.respawn(ped, true);
+      if (this.scene) this.scene.add(rig);
       this.peds.push(ped);
     }
+    return this.peds.length;
   }
 
-  sidewalkPoint() {
-    const r = this.rng;
-    // Sidewalk beside a span-clipped road, never on bay/ocean water.
-    for (let tries = 0; tries < 12; tries += 1) {
-      if (r() < 0.5) {
-        const ave = ROAD_NETWORK.avenues[Math.floor(r() * ROAD_NETWORK.avenues.length)];
-        const side = r() < 0.5 ? -1 : 1;
-        const x = ave.x + side * (ave.width / 2 + 4 + r() * 3);
-        const zMin = Math.max(ave.minZ ?? WORLD_BOUNDS.minZ, WORLD_BOUNDS.minZ);
-        const zMax = Math.min(ave.maxZ ?? 590, 590);
-        const z = zMin + r() * Math.max(1, zMax - zMin);
-        if (!isWater(x, z)) return new THREE.Vector3(x, 0, z);
-      } else {
-        const blvd = ROAD_NETWORK.boulevards[Math.floor(r() * ROAD_NETWORK.boulevards.length)];
-        const side = r() < 0.5 ? -1 : 1;
-        const z = blvd.z + side * (blvd.width / 2 + 4 + r() * 3);
-        const xMin = Math.max(blvd.minX ?? WORLD_BOUNDS.minX, WORLD_BOUNDS.minX);
-        const xMax = Math.min(blvd.maxX ?? WORLD_BOUNDS.maxX, WORLD_BOUNDS.maxX);
-        const x = xMin + r() * Math.max(1, xMax - xMin);
-        if (!isWater(x, z)) return new THREE.Vector3(x, 0, z);
-      }
-    }
-    return new THREE.Vector3(-500 + r() * 40, 0, -300 + r() * 640);
-  }
-
-  randomStrollPoint(center, spread = 60) {
-    // Short stroll around a sidewalk point; clamp to world + dry land.
-    for (let tries = 0; tries < 8; tries += 1) {
-      const x = center.x + (this.rng() - 0.5) * spread * 2;
-      const z = center.z + (this.rng() - 0.5) * spread * 2;
-      const cx = Math.max(WORLD_BOUNDS.minX + 4, Math.min(WORLD_BOUNDS.maxX - 4, x));
-      const cz = Math.max(WORLD_BOUNDS.minZ + 4, Math.min(WORLD_BOUNDS.maxZ - 4, z));
-      if (!isWater(cx, cz)) return new THREE.Vector3(cx, 0, cz);
-    }
-    const safe = this.sidewalkPoint();
-    safe.y = 0;
-    return safe;
-  }
-
-  respawn(ped, anywhere = false) {
-    if (anywhere || this.rng() < 0.7) {
-      ped.pos.copy(this.sidewalkPoint());
-    } else {
-      // Beach boardwalk stroll, verified dry.
-      ped.pos.set(-500 + this.rng() * 40, 0, -300 + this.rng() * 640);
-      if (isWater(ped.pos.x, ped.pos.z)) ped.pos.copy(this.sidewalkPoint());
-    }
-    ped.target.copy(this.randomStrollPoint(ped, 50));
-    ped.rig.position.copy(ped.pos);
-    ped.state = 'walk';
-    ped.fleeTimer = 0;
-  }
-
-  // Gunfire / reckless driving scares everyone nearby: raised arms, sprint away.
-  panicAt(x, z, radius = 40) {
-    this.panicEvents.push({ x, z, radius, ttl: 0.2 });
+  update(dt) {
     for (const ped of this.peds) {
-      const d = Math.hypot(ped.pos.x - x, ped.pos.z - z);
-      if (d < radius) {
-        ped.state = 'flee';
-        ped.fleeTimer = 4 + this.rng() * 3;
-        const away = new THREE.Vector3(ped.pos.x - x, 0, ped.pos.z - z).normalize();
-        const dest = ped.pos.clone().addScaledVector(away, 60 + this.rng() * 40);
-        dest.x = Math.max(WORLD_BOUNDS.minX + 4, Math.min(WORLD_BOUNDS.maxX - 4, dest.x));
-        dest.z = Math.max(WORLD_BOUNDS.minZ + 4, Math.min(WORLD_BOUNDS.maxZ - 4, dest.z));
-        ped.target.copy(isWater(dest.x, dest.z) ? this.sidewalkPoint() : dest);
+      ped.t += dt;
+      const nx = ped.x + Math.sin(ped.heading) * ped.speed * dt;
+      const nz = ped.z + Math.cos(ped.heading) * ped.speed * dt;
+      const clamped = clampToRoadSpan(nx, nz);
+      if (!isWater(clamped.x, clamped.z)) {
+        ped.x = clamped.x;
+        ped.z = clamped.z;
+      } else {
+        ped.heading += Math.PI * (0.5 + this.rand() * 0.5);
       }
+      if (this.rand() < dt * 0.05) ped.heading += (this.rand() - 0.5) * 1.2;
+      ped.mesh.position.set(ped.x, 0, ped.z);
+      ped.mesh.rotation.y = ped.heading;
+      const swing = Math.sin(ped.t * 7) * 0.55;
+      ped.mesh.userData.legL.rotation.x = swing;
+      ped.mesh.userData.legR.rotation.x = -swing;
+      ped.mesh.userData.armL.rotation.x = -swing * 0.6;
+      ped.mesh.userData.armR.rotation.x = swing * 0.6;
     }
   }
-
-  update(dt, playerPos) {
-    for (const ped of this.peds) {
-      const to = new THREE.Vector3().subVectors(ped.target, ped.pos);
-      to.y = 0;
-      const dist = to.length();
-      if (dist < 3) {
-        ped.target.copy(this.randomStrollPoint(ped, ped.state === 'flee' ? 70 : 50));
-      } else {
-        to.normalize();
-        const want = Math.atan2(-to.x, -to.z);
-        let dh = want - ped.heading;
-        while (dh > Math.PI) dh -= Math.PI * 2;
-        while (dh < -Math.PI) dh += Math.PI * 2;
-        ped.heading += dh * Math.min(1, dt * 5);
-        const sp = ped.state === 'flee' ? ped.speed * 3.2 : ped.speed;
-        const step = Math.min(dist, sp * dt);
-        const nx = ped.pos.x + to.x * step;
-        const nz = ped.pos.z + to.z * step;
-        // Sidewalk clamp: never step onto bay/ocean water.
-        if (!isWater(nx, nz)) {
-          ped.pos.x = Math.max(WORLD_BOUNDS.minX + 2, Math.min(WORLD_BOUNDS.maxX - 2, nx));
-          ped.pos.z = Math.max(WORLD_BOUNDS.minZ + 2, Math.min(WORLD_BOUNDS.maxZ - 2, nz));
-        } else {
-          ped.target.copy(this.randomStrollPoint(ped, 60));
-        }
-      }
-      if (ped.state === 'flee') {
-        ped.fleeTimer -= dt;
-        if (ped.fleeTimer <= 0) ped.state = 'walk';
-      }
-      ped.pos.y = 0;
-      ped.rig.position.copy(ped.pos);
-      ped.rig.rotation.set(0, ped.heading, 0);
-
-      // Animate: relaxed swing while strolling, raised trembling arms while fleeing.
-      ped.phase += dt * (ped.state === 'flee' ? 14 : 6);
-      const j = ped.rig.userData.joints;
-      const swing = Math.sin(ped.phase) * (ped.state === 'flee' ? 0.9 : 0.45);
-      j.legL.hip.rotation.x = swing;
-      j.legR.hip.rotation.x = -swing;
-      if (ped.state === 'flee') {
-        j.armL.shoulder.rotation.set(-2.6 + Math.sin(ped.phase * 1.7) * 0.25, 0, -0.5);
-        j.armR.shoulder.rotation.set(-2.6 - Math.sin(ped.phase * 1.7) * 0.25, 0, 0.5);
-        j.armL.elbow.rotation.x = -0.2;
-        j.armR.elbow.rotation.x = -0.2;
-      } else {
-        j.armL.shoulder.rotation.set(-swing * 0.7, 0, -0.12);
-        j.armR.shoulder.rotation.set(swing * 0.7, 0, 0.12);
-      }
-
-      // Recycle far-off peds near the player onto dry sidewalks.
-      if (playerPos && ped.pos.distanceTo(playerPos) > 320) {
-        ped.pos.copy(this.sidewalkPoint());
-        ped.target.copy(this.randomStrollPoint(ped, 50));
-      }
-    }
-  }
-}
-
-export function createCharacterRig(options = {}) {
-  const skin = options.skin ?? SKIN[0];
-  const top = options.top ?? TOPS[0];
-  const bottom = options.bottom ?? BOTTOMS[0];
-  const hairColor = options.hair ?? 0x2a1a12;
-  const female = !!options.female;
-  const root = new THREE.Group();
-  const joints = {};
-
-  const hips = new THREE.Group();
-  hips.position.y = 0.96;
-  root.add(hips);
-  joints.hips = hips;
-
-  const torso = limb(0.52, 0.62, 0.3, top);
-  torso.position.y = 0.36;
-  hips.add(torso);
-  joints.torso = torso;
-
-  const collar = limb(0.56, 0.12, 0.34, 0x1c1c28);
-  collar.position.y = 0.62;
-  hips.add(collar);
-  const vestTrim = limb(0.1, 0.5, 0.32, 0x14141c);
-  vestTrim.position.set(-0.2, 0.36, 0);
-  hips.add(vestTrim);
-
-  const headG = new THREE.Group();
-  headG.position.y = 0.78;
-  hips.add(headG);
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.2, 12, 10),
-    new THREE.MeshLambertMaterial({ color: skin }),
-  );
-  head.castShadow = true;
-  headG.add(head);
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.21, 12, 8, 0, Math.PI * 2, 0, 1.9),
-    new THREE.MeshLambertMaterial({ color: hairColor }),
-  );
-  hair.position.y = 0.05;
-  headG.add(hair);
-  if (female) {
-    // Ponytail sweeping down the back + side-swept fringe.
-    const pony = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.1, 0.42, 8),
-      new THREE.MeshLambertMaterial({ color: hairColor }),
-    );
-    pony.position.set(0, -0.02, 0.24);
-    pony.rotation.x = 0.5;
-    headG.add(pony);
-    const fringe = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 8, 6),
-      new THREE.MeshLambertMaterial({ color: hairColor }),
-    );
-    fringe.position.set(0.08, 0.12, -0.14);
-    headG.add(fringe);
-  } else {
-    // Short cropped top volume for male peds.
-    const crop = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.1, 0.3),
-      new THREE.MeshLambertMaterial({ color: hairColor }),
-    );
-    crop.position.y = 0.2;
-    headG.add(crop);
-  }
-  if (options.hat) {
-    const brim = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.3, 0.3, 0.06, 12),
-      new THREE.MeshLambertMaterial({ color: 0xfff3d6 }),
-    );
-    brim.position.y = 0.16;
-    headG.add(brim);
-  }
-  joints.head = headG;
-
-  function makeArm(side) {
-    const shoulder = new THREE.Group();
-    shoulder.position.set(0.34 * side, 0.6, 0);
-    hips.add(shoulder);
-    const upper = limb(0.15, 0.34, 0.15, top);
-    upper.position.y = -0.17;
-    shoulder.add(upper);
-    const elbow = new THREE.Group();
-    elbow.position.y = -0.34;
-    shoulder.add(elbow);
-    const fore = limb(0.13, 0.32, 0.13, skin);
-    fore.position.y = -0.16;
-    elbow.add(fore);
-    const hand = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 8, 6),
-      new THREE.MeshLambertMaterial({ color: skin }),
-    );
-    hand.position.y = -0.34;
-    elbow.add(hand);
-    return { shoulder, elbow, hand };
-  }
-
-  function makeLeg(side) {
-    const hip = new THREE.Group();
-    hip.position.set(0.15 * side, 0, 0);
-    hips.add(hip);
-    const thigh = limb(0.18, 0.46, 0.18, bottom);
-    thigh.position.y = -0.24;
-    hip.add(thigh);
-    const knee = new THREE.Group();
-    knee.position.y = -0.48;
-    hip.add(knee);
-    const shin = limb(0.15, 0.44, 0.15, skin);
-    shin.position.y = -0.22;
-    knee.add(shin);
-    // Chunky sneaker at the foot.
-    const shoe = limb(0.17, 0.1, 0.3, 0xffffff);
-    shoe.position.set(0, -0.46, -0.05);
-    knee.add(shoe);
-    return { hip, knee };
-  }
-
-  joints.armL = makeArm(-1);
-  joints.armR = makeArm(1);
-  joints.legL = makeLeg(-1);
-  joints.legR = makeLeg(1);
-
-  // Visible 3D handheld gun: receiver + barrel + grip + magazine.
-  const gunMesh = new THREE.Group();
-  const receiver = limb(0.09, 0.12, 0.34, 0x23232e);
-  gunMesh.add(receiver);
-  const barrel = limb(0.05, 0.05, 0.3, 0x3a3a48);
-  barrel.position.set(0, 0.03, -0.3);
-  gunMesh.add(barrel);
-  const grip = limb(0.07, 0.18, 0.09, 0x1a1a24);
-  grip.position.set(0, -0.13, 0.08);
-  grip.rotation.x = 0.25;
-  gunMesh.add(grip);
-  const mag = limb(0.06, 0.14, 0.08, 0x2c2c38);
-  mag.position.set(0, -0.1, -0.05);
-  mag.rotation.x = -0.2;
-  gunMesh.add(mag);
-  gunMesh.scale.setScalar(0.55);
-  gunMesh.position.set(0, -0.28, -0.16);
-  gunMesh.rotation.x = -Math.PI / 2;
-  gunMesh.visible = false;
-  joints.armR.hand.add(gunMesh);
-  root.userData.gunMesh = gunMesh;
-
-  // Weapon aim helper in the right hand + frame-attached muzzle flash quad.
-  const weapon = new THREE.Group();
-  const wGrip = limb(0.09, 0.22, 0.12, 0x1a1a24);
-  weapon.add(wGrip);
-  const wBarrel = limb(0.07, 0.07, 0.5, 0x2c2c38);
-  wBarrel.position.set(0, 0.06, -0.28);
-  weapon.add(wBarrel);
-  const flash = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.4, 0.4),
-    new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  flash.position.set(0, 0.06, -0.62);
-  weapon.add(flash);
-  weapon.position.set(0, -0.36, -0.08);
-  weapon.rotation.x = -Math.PI / 2;
-  joints.armR.hand.add(weapon);
-  joints.weapon = weapon;
-  joints.muzzleFlash = flash;
-  joints.flashTimer = 0;
-
-  root.userData.joints = joints;
-  root.traverse((o) => {
-    if (o.isMesh) o.castShadow = true;
-  });
-  return root;
-}
-
-export function triggerMuzzleFlash(rig) {
-  const j = rig.userData.joints;
-  if (j) j.flashTimer = 0.06;
-}
-
-const SKIN = [0xf2c49b, 0xc98a5e, 0x8a5a34, 0x5e3a22];
-const TOPS = [0xff5a4e, 0x38e8ff, 0xffc44d, 0xff3fa4, 0x7fd6a4, 0xffffff, 0x4d7dff];
-const BOTTOMS = [0x274060, 0xf2ead8, 0xff7a3c, 0x1c2f55, 0x7a4a6e, 0x3f6b4f];
-
-function limb(w, h, d, color) {
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshLambertMaterial({ color }),
-  );
-  m.castShadow = true;
-  return m;
 }

@@ -1,271 +1,177 @@
-// Costa Vermillion: Sunset Syndicate — 'The Sunset Ledger' campaign + save slots.
-// 100% original content. Imports only './cityConfig.js'.
-import {
-  LANDMARKS,
-  SAVE_SLOTS,
-  STORY_CHAPTERS,
-  WEAPON_SPECS,
-  getWaypointRoute,
-  landmarkById,
-} from './cityConfig.js';
+// The Sunset Ledger campaign, respect ranks, shops and 3-slot saves.
+// GPS routes always refresh through getWaypointRoute so the line on the
+// radar matches the roads the traffic actually drives.
 
-const RESPECT_RANKS = ['Nobody', 'Runner', 'Hustler', 'Player', 'Shot Caller', 'Syndicate', 'Sunset Legend'];
+import { STORY_CHAPTERS, LANDMARKS, getWaypointRoute, landmarkById } from './cityConfig.js';
 
-function rankFor(respect) {
-  if (respect >= 600) return RESPECT_RANKS[6];
-  if (respect >= 420) return RESPECT_RANKS[5];
-  if (respect >= 300) return RESPECT_RANKS[4];
-  if (respect >= 190) return RESPECT_RANKS[3];
-  if (respect >= 100) return RESPECT_RANKS[2];
-  if (respect >= 40) return RESPECT_RANKS[1];
-  return RESPECT_RANKS[0];
-}
-
-// Elena Vega & Mateo Cruz comms lines per chapter stage.
-const COMMS = {
-  ch1_salt_neon: [
-    ['MATEO CRUZ', 'Elena! You made it back. My crew is waiting at Hotel Mariposa.'],
-    ['ELENA VEGA', 'The coast smells the same. Salt, neon, trouble. Show me the streets.'],
-    ['MATEO CRUZ', 'That Brisa Cabrio is ours. Take it back, and shake the PVPD tail!'],
-  ],
-  ch2_mariposa_deal: [
-    ['ELENA VEGA', 'A Solar Club buyer pays double for a Veloce GT. No questions.'],
-    ['MATEO CRUZ', 'Grab one and ghost the Interceptors. Garage crew will handle the rest.'],
-  ],
-  ch3_engines_bahia: [
-    ['MATEO CRUZ', 'The Boveda truck at Bahia Terminal is stuffed with cargo. Crack it.'],
-    ['ELENA VEGA', 'Guards, cranes, heat. Fine. Deliver it to the Harbor Armory after.'],
-  ],
-  ch4_starlight_debts: [
-    ['ELENA VEGA', 'Debts across the bay, hermana. The Causeway is our only road out.'],
-    ['MATEO CRUZ', 'Safehouse first, then vanish by speedboat. The Keys hide everyone.'],
-  ],
-  ch5_tower_run: [
-    ['MATEO CRUZ', 'A ledger page sits atop Vermillion Tower. Four stars on your tail.'],
-    ['ELENA VEGA', 'Then I climb fast and leave faster. Keep the engine running.'],
-  ],
-  ch6_sunset_ledger: [
-    ['ELENA VEGA', 'One last run. Coral, Downtown, Bahia, the Keys — all of it.'],
-    ['MATEO CRUZ', 'Outrun the blockade at Palm Paradise and the ledger is ours. Forever.'],
-  ],
-};
-
-const SERVICE_ZONES = [
-  { kind: 'garage', id: 'coral_mod_garage', radius: 16, title: 'Coral Mod Garage' },
-  { kind: 'armory', id: 'harbor_armory', radius: 16, title: 'Harbor Armory' },
+const RESPECT_TITLES = [
+  { min: 0, title: 'NOBODY' },
+  { min: 200, title: 'RUNNER' },
+  { min: 600, title: 'HUSTLER' },
+  { min: 1200, title: 'SHOT CALLER' },
+  { min: 2200, title: 'SUNSET ROYALTY' },
 ];
 
-// Drives all 6 chapters: objectives, dialogue, GPS, cash/respect, services.
 export class StoryCampaignManager {
-  constructor(opts = {}) {
+  constructor() {
     this.chapterIndex = 0;
-    this.objectiveIndex = 0;
-    this.cash = opts.cash ?? 1250;
-    this.respect = opts.respect ?? 10;
-    this.playerPos = { x: -400, z: 20 };
-    this.route = null;
-    this.routeTargetId = null;
-    this.dialogueQueue = [];
-    this.pendingRewards = null;
-    this.completed = false;
-    this.onDialogue = opts.onDialogue || null;
-    this.city = opts.city || null; // { setBeaconPosition } from buildCoastalCityWorld
+    this.stage = 0;
+    this.cash = 400;
+    this.respect = 0;
+    this.armor = 0;
+    this.gpsRoute = [];
+    this.banner = '';
+    this.bannerT = 0;
+    this.objective = STORY_CHAPTERS[0].brief;
   }
 
-  get chapter() {
-    return STORY_CHAPTERS[Math.min(this.chapterIndex, STORY_CHAPTERS.length - 1)];
+  currentChapter() {
+    return STORY_CHAPTERS[this.chapterIndex] || STORY_CHAPTERS[STORY_CHAPTERS.length - 1];
   }
 
-  get missionTarget() {
-    const lm = landmarkById(this.chapter.locationId);
-    return lm ? { x: lm.pos.x, z: lm.pos.z, name: lm.name } : { x: 0, z: 0, name: 'Puerto Vermillion' };
-  }
-
-  objectiveText() {
-    return this.chapter.objectives[Math.min(this.objectiveIndex, this.chapter.objectives.length - 1)];
-  }
-
-  // Fresh GPS polyline from the player to the current mission target.
-  refreshRoute() {
-    const t = this.missionTarget;
-    this.route = getWaypointRoute({ x: this.playerPos.x, z: this.playerPos.z }, { x: t.x, z: t.z });
-    this.routeTargetId = this.chapter.locationId;
-    if (this.city?.setBeaconPosition) this.city.setBeaconPosition(t.x, t.z);
-    return this.route;
+  chapterLocation(chapter) {
+    const mark = landmarkById(chapter.location);
+    if (mark) return { x: mark.x, z: mark.z };
+    return { x: 0, z: 0 };
   }
 
   startChapter(index) {
     this.chapterIndex = Math.max(0, Math.min(STORY_CHAPTERS.length - 1, index));
-    this.objectiveIndex = 0;
-    this.completed = false;
-    this.pendingRewards = null;
-    this.dialogueQueue = [...(COMMS[this.chapter.id] || [])];
-    this.pumpDialogue();
-    return this.refreshRoute();
+    this.stage = 0;
+    const chapter = this.currentChapter();
+    this.objective = chapter.brief;
+    this.setBanner(`CHAPTER ${chapter.no}: ${chapter.title.toUpperCase()}`);
+    return chapter;
   }
 
-  pumpDialogue() {
-    const next = this.dialogueQueue.shift();
-    if (next && this.onDialogue) this.onDialogue(next[0], next[1]);
-    return next || null;
+  setBanner(text) {
+    this.banner = text;
+    this.bannerT = 6;
   }
 
-  // Called by main.js when a staged goal finishes; returns reward info or null.
-  advanceObjective(extra = {}) {
-    const ch = this.chapter;
-    this.objectiveIndex += 1;
-    if (this.objectiveIndex < ch.objectives.length) {
-      const more = this.dialogueQueue.shift();
-      if (more && this.onDialogue) this.onDialogue(more[0], more[1]);
-      return { chapterComplete: false, objective: this.objectiveText() };
+  refreshGps(from) {
+    const target = this.chapterLocation(this.currentChapter());
+    this.gpsRoute = getWaypointRoute(from, target);
+    return this.gpsRoute;
+  }
+
+  advanceStage(playerPos) {
+    this.stage += 1;
+    this.respect += 120;
+    this.cash += 250;
+    this.setBanner(`STAGE ${this.stage} CLEAR  +$250`);
+    if (this.stage >= 3) this.completeChapter(playerPos);
+    else if (playerPos) this.refreshGps(playerPos);
+  }
+
+  completeChapter(playerPos) {
+    const done = this.currentChapter();
+    this.respect += 300;
+    this.cash += 1000;
+    if (this.chapterIndex < STORY_CHAPTERS.length - 1) {
+      this.startChapter(this.chapterIndex + 1);
+    } else {
+      this.setBanner('THE SUNSET LEDGER: SETTLED');
     }
-    // Chapter complete: cash + respect progression.
-    const rewardCash = 800 + ch.chapter * 450 + (extra.bonus || 0);
-    const rewardRespect = 45 + ch.chapter * 22;
-    this.cash += rewardCash;
-    this.respect += rewardRespect;
-    this.pendingRewards = { cash: rewardCash, respect: rewardRespect };
-    if (this.chapterIndex >= STORY_CHAPTERS.length - 1) {
-      this.completed = true;
-      if (this.onDialogue) this.onDialogue('ELENA VEGA', 'The Sunset Ledger is closed. Puerto Vermillion is ours.');
-      return { chapterComplete: true, campaignComplete: true, ...this.pendingRewards };
-    }
-    this.chapterIndex += 1;
-    this.objectiveIndex = 0;
-    this.dialogueQueue = [...(COMMS[this.chapter.id] || [])];
-    this.pumpDialogue();
-    this.refreshRoute();
-    return { chapterComplete: true, campaignComplete: false, ...this.pendingRewards, next: this.chapter.title };
+    return done;
   }
 
-  syncPlayerPos(x, z) {
-    this.playerPos.x = x;
-    this.playerPos.z = z;
+  respectTitle() {
+    let title = RESPECT_TITLES[0].title;
+    for (const row of RESPECT_TITLES) {
+      if (this.respect >= row.min) title = row.title;
+    }
+    return title;
   }
 
-  missionDistance() {
-    const t = this.missionTarget;
-    return Math.hypot(t.x - this.playerPos.x, t.z - this.playerPos.z);
+  visitCoralModGarage() {
+    this.armor = Math.min(100, this.armor + 25);
+    if (this.cash >= 150) this.cash -= 150;
+    return { armor: this.armor, cash: this.cash, cleared: true };
   }
 
-  // Coral Mod Garage: respray + repair + heat clear for cash.
-  garageService(player, police) {
-    if (this.cash < 350) return { ok: false, reason: 'Need $350' };
-    this.cash -= 350;
-    if (police) police.clearHeat();
-    const ctrl = player?.inVehicle;
-    if (ctrl) {
-      ctrl.damage = 0;
-      ctrl.nitro = 1;
-      const mesh = ctrl.mesh;
-      mesh.traverse((o) => {
-        if (o.isMesh && o.material?.color && o.material.color.getHex() !== 0x14141c) {
-          o.material.color.offsetHSL(0.08, 0, 0);
-        }
-      });
-    }
-    if (player) {
-      player.health = 100;
-      player.armor = Math.max(player.armor, 50);
-    }
-    return { ok: true, service: 'Respray + repair + heat cleared' };
+  visitHarborArmory() {
+    return { coral_smg: 128, breacher_shotgun: 24, pulse_grenade: 3, viper_pistol: 48 };
   }
 
-  // Harbor Armory: armor + ammo refill for cash.
-  armoryService(player, combat) {
-    if (this.cash < 250) return { ok: false, reason: 'Need $250' };
-    this.cash -= 250;
-    if (player) {
-      player.armor = 100;
-      player.health = Math.min(100, player.health + 25);
-    }
-    if (combat) {
-      for (const id of Object.keys(WEAPON_SPECS)) combat.addAmmo(id, WEAPON_SPECS[id].magazine);
-    }
-    return { ok: true, service: 'Armor + ammo restocked' };
+  landmarkBlurb(id) {
+    const mark = LANDMARKS.find((l) => l.id === id);
+    return mark ? mark.blurb : '';
   }
 
-  serviceAt(x, z) {
-    for (const s of SERVICE_ZONES) {
-      const lm = landmarkById(s.id);
-      if (lm && Math.hypot(lm.pos.x - x, lm.pos.z - z) < s.radius) return s;
-    }
-    return null;
+  update(dt) {
+    if (this.bannerT > 0) this.bannerT = Math.max(0, this.bannerT - dt);
   }
 
-  getState() {
+  snapshot(activeChar) {
     return {
       chapterIndex: this.chapterIndex,
-      objectiveIndex: this.objectiveIndex,
+      stage: this.stage,
       cash: this.cash,
       respect: this.respect,
-      rank: rankFor(this.respect),
-      completed: this.completed,
+      armor: this.armor,
+      activeChar,
     };
   }
 
-  setState(s = {}) {
-    if (Number.isInteger(s.chapterIndex)) this.chapterIndex = Math.max(0, Math.min(STORY_CHAPTERS.length - 1, s.chapterIndex));
-    if (Number.isInteger(s.objectiveIndex)) this.objectiveIndex = Math.max(0, s.objectiveIndex);
-    if (Number.isFinite(s.cash)) this.cash = s.cash;
-    if (Number.isFinite(s.respect)) this.respect = s.respect;
-    this.completed = !!s.completed;
-    this.refreshRoute();
+  restore(data) {
+    if (!data) return;
+    if (Number.isInteger(data.chapterIndex)) this.chapterIndex = data.chapterIndex;
+    if (Number.isInteger(data.stage)) this.stage = data.stage;
+    if (typeof data.cash === 'number') this.cash = data.cash;
+    if (typeof data.respect === 'number') this.respect = data.respect;
+    if (typeof data.armor === 'number') this.armor = data.armor;
+    this.objective = this.currentChapter().brief;
   }
-
-  static rankFor = rankFor;
-  static landmarks = LANDMARKS;
-  static serviceZones = SERVICE_ZONES;
 }
 
-// 3-slot localStorage Save/Load for campaign + player state.
+const SAVE_KEY = 'sunset-syndicate-save-';
+
 export class SaveGameManager {
-  constructor(prefix = 'sunset') {
-    this.prefix = prefix;
-    this.slots = SAVE_SLOTS;
+  constructor() {
+    this.lastBadge = '';
   }
 
-  key(slot) {
-    return `${this.prefix}_save_${slot}`;
+  slotKey(slot) {
+    return `${SAVE_KEY}${slot}`;
   }
 
   save(slot, data) {
     try {
-      window.localStorage.setItem(this.key(slot), JSON.stringify({ ...data, savedAt: Date.now() }));
+      window.localStorage.setItem(this.slotKey(slot), JSON.stringify({ ...data, savedAt: Date.now() }));
+      this.lastBadge = `SAVED SLOT ${slot} ${new Date().toLocaleTimeString()}`;
       return true;
     } catch {
+      this.lastBadge = 'SAVE FAILED';
       return false;
     }
   }
 
   load(slot) {
     try {
-      const raw = window.localStorage.getItem(this.key(slot));
-      return raw ? JSON.parse(raw) : null;
+      const raw = window.localStorage.getItem(this.slotKey(slot));
+      if (!raw) {
+        this.lastBadge = `SLOT ${slot} EMPTY`;
+        return null;
+      }
+      const data = JSON.parse(raw);
+      this.lastBadge = `LOADED SLOT ${slot}`;
+      return data;
     } catch {
+      this.lastBadge = 'LOAD FAILED';
       return null;
     }
   }
 
-  has(slot) {
+  slotLabel(slot) {
     try {
-      return window.localStorage.getItem(this.key(slot)) !== null;
+      const raw = window.localStorage.getItem(this.slotKey(slot));
+      if (!raw) return `SLOT ${slot}: EMPTY`;
+      const data = JSON.parse(raw);
+      const when = data.savedAt ? new Date(data.savedAt).toLocaleString() : 'unknown time';
+      return `SLOT ${slot}: CH${(data.chapterIndex ?? 0) + 1} $${data.cash ?? 0} ${when}`;
     } catch {
-      return false;
+      return `SLOT ${slot}: EMPTY`;
     }
-  }
-
-  snapshot(slot, story, player, extra = {}) {
-    return this.save(slot, {
-      story: story.getState(),
-      player: {
-        x: player.pos.x,
-        z: player.pos.z,
-        heading: player.heading,
-        health: player.health,
-        armor: player.armor,
-      },
-      ...extra,
-    });
   }
 }
